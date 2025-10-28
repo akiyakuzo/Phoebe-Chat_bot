@@ -53,39 +53,6 @@ tree = bot.tree
 flirt_enable = True
 
 # ========== SLASH COMMANDS ==========
-@tree.command(name="hỏi", description="Hỏi Phoebe Xinh Đẹp bất cứ điều gì 💬")
-async def ask(interaction: discord.Interaction, cauhoi: str):
-    global flirt_enable
-    await interaction.response.defer(thinking=True)
-    answer = "⚠️ Đang có lỗi, thử lại sau."
-
-    try:
-        temperature = 0.9 if flirt_enable else 0.6
-
-        response = client.chats.create(
-            model="gemini-1.5-turbo",
-            content=f"{PHOBE_PERSONA}\n\nNgười hỏi: {cauhoi}\nPhobe trả lời:"
-        )
-
-        answer = response.output_text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
-
-    except Exception as e:
-        answer = f"⚠️ Lỗi Gemini: `{e}`"
-
-    embed = discord.Embed(
-        title=f"{BOT_NAME} trả lời 💕",
-        description=f"**Người hỏi:** {interaction.user.mention}\n\n**Câu hỏi:** {cauhoi}\n\n**Phobe:** {answer}",
-        color=0xFF9CCC
-    )
-    embed.set_thumbnail(url=random.choice([
-        "https://files.catbox.moe/2474tj.png",
-        "https://files.catbox.moe/66v9vw.jpg",
-        "https://files.catbox.moe/ezqs00.jpg",
-        "https://files.catbox.moe/yow35q.png",
-        "https://files.catbox.moe/pzbhdp.jpg"
-    ]))
-    await interaction.followup.send(embed=embed)
-
 @tree.command(name="deleteoldconversation", description="Xóa lịch sử hội thoại cũ của Phoebe 🧹")
 async def delete_conv(interaction: discord.Interaction):
     await interaction.response.send_message("🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖", ephemeral=True)
