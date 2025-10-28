@@ -65,7 +65,7 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         response = client.chats.create(
             model="gemini-1.5-turbo",
             input=[
-                {"author": "system", "content": "Bạn là Phoebe Xinh Đẹp 💖..."},
+                {"author": "system", "content": PHOBE_PERSONA},
                 {"author": "user", "content": cauhoi}
             ],
             temperature=temperature
