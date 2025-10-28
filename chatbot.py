@@ -93,16 +93,20 @@ async def chat18(interaction: discord.Interaction, enable: bool):
 )
 async def ask(interaction: discord.Interaction, cauhoi: str):
     global flirt_enable, chat_context
-    await interaction.response.defer(thinking=True)
-    answer = "⚠️ Đang có lỗi, thử lại sau."
 
     try:
+        # defer để Discord biết bot đang trả lời
+        await interaction.response.defer(thinking=True)
+
+        # Khởi tạo chat context nếu chưa có
         if chat_context is None:
             chat_context = client.chats.create(model="gemini-1.5-turbo")
             chat_context.append_message(author="system", content=PHOBE_PERSONA)
 
+        # Thêm message từ user
         chat_context.append_message(author="user", content=cauhoi)
 
+        # Tạo response từ Gemini
         response = chat_context.responses.create(
             temperature=0.9 if flirt_enable else 0.6
         )
@@ -112,6 +116,7 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     except Exception as e:
         answer = f"⚠️ Lỗi Gemini: `{e}`"
 
+    # Tạo embed trả về
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=(
@@ -128,8 +133,10 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         "https://files.catbox.moe/yow35q.png",
         "https://files.catbox.moe/pzbhdp.jpg"
     ]))
+
+    # Gửi follow-up để hoàn tất interaction
     await interaction.followup.send(embed=embed)
-    
+
 # ========== TRẠNG THÁI BOT ==========
 status_list = [
     "Ngủ đông với Phoebe 💜",
