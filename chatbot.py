@@ -1,5 +1,3 @@
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
-
 # ==== Patch cho Python 3.13 ====
 import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
@@ -17,6 +15,8 @@ from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 from google import genai
+
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
