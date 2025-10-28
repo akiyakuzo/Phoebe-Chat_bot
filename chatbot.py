@@ -61,8 +61,7 @@ GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))  # 0 = global
 # ---------- Delete old conversation ----------
 @tree.command(
     name="deleteoldconversation",
-    description="Xóa lịch sử hội thoại cũ của Phoebe 🧹",
-    guild_ids=[GUILD_ID] if GUILD_ID else None
+    description="Xóa lịch sử hội thoại cũ của Phoebe 🧹"
 )
 async def delete_conv(interaction: discord.Interaction):
     global chat_context
@@ -75,8 +74,7 @@ async def delete_conv(interaction: discord.Interaction):
 # ---------- Chat 18+ toggle ----------
 @tree.command(
     name="chat18plus",
-    description="Bật/Tắt chế độ trò chuyện 18+ (flirt mạnh hơn nhưng safe)",
-    guild_ids=[GUILD_ID] if GUILD_ID else None
+    description="Bật/Tắt chế độ trò chuyện 18+ (flirt mạnh hơn nhưng safe)"
 )
 async def chat18(interaction: discord.Interaction, enable: bool):
     global flirt_enable
@@ -90,9 +88,8 @@ async def chat18(interaction: discord.Interaction, enable: bool):
 
 # ---------- Hỏi Phoebe ----------
 @tree.command(
-    name="hỏi",
-    description="Hỏi Phoebe Xinh Đẹp bất cứ điều gì 💬",
-    guild_ids=[GUILD_ID] if GUILD_ID else None
+    name="hoi",
+    description="Hỏi Phoebe Xinh Đẹp bất cứ điều gì 💬"
 )
 async def ask(interaction: discord.Interaction, cauhoi: str):
     global flirt_enable, chat_context
@@ -100,15 +97,12 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     answer = "⚠️ Đang có lỗi, thử lại sau."
 
     try:
-        # Nếu chưa có chat_context, tạo mới
         if chat_context is None:
             chat_context = client.chats.create(model="gemini-1.5-turbo")
             chat_context.append_message(author="system", content=PHOBE_PERSONA)
 
-        # Thêm câu hỏi của user
         chat_context.append_message(author="user", content=cauhoi)
 
-        # Tạo response với temperature theo chế độ flirt
         response = chat_context.responses.create(
             temperature=0.9 if flirt_enable else 0.6
         )
@@ -118,7 +112,6 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     except Exception as e:
         answer = f"⚠️ Lỗi Gemini: `{e}`"
 
-    # Tạo embed trả lời
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=(
