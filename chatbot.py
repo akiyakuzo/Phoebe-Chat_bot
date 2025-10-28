@@ -61,18 +61,19 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
 
     try:
         temperature = 0.9 if flirt_enable else 0.6
-    
+
         response = client.chats.create(
             model="gemini-1.5-turbo",
-            messages=[
-                {"role": "system", "content": "Bạn là Phoebe Xinh Đẹp 💖..."},
-                {"role": "user", "content": "Câu hỏi của người dùng"}
-            ]
+            input=[
+                {"author": "system", "content": "Bạn là Phoebe Xinh Đẹp 💖..."},
+                {"author": "user", "content": cauhoi}
+            ],
+            temperature=temperature
         )
-    
-        # Lấy text từ response
-        answer = response.result[0].content[0].text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
-    
+
+        # Lấy text từ response mới
+        answer = response.output_text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
+
     except Exception as e:
         answer = f"⚠️ Lỗi Gemini: `{e}`"
 
