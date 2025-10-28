@@ -1,7 +1,6 @@
 Flask==3.0.3
 discord.py==2.4.0
 google-genai>=1.46.0
-openai>=1.40.0
+openai>=2.6.1
 waitress==3.0.0
 requests>=2.31.0
-google-generativeai>=1.46.0
