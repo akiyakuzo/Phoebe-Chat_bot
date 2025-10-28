@@ -14,7 +14,7 @@ import discord
 from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
-import google_genai as genai
+import google.generativeai as genai
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
