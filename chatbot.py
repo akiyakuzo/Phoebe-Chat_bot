@@ -62,10 +62,9 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     try:
         temperature = 0.9 if flirt_enable else 0.6
 
-        # Gemini SDK mới chỉ cần 'prompt'
         response = client.chats.create(
             model="gemini-1.5-turbo",
-            prompt=f"{PHOBE_PERSONA}\nNgười hỏi: {cauhoi}\nPhobe trả lời:"
+            content=f"{PHOBE_PERSONA}\n\nNgười hỏi: {cauhoi}\nPhobe trả lời:"
         )
 
         answer = response.output_text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
