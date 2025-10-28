@@ -3,7 +3,7 @@ import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
 
 """
-💖 Phobe Xinh Đẹp v6.4 (Gemini Edition)
+💖 Phoebe Xinh Đẹp v6.4 (Gemini Edition)
 Google Gemini dev mode
 Flask + discord.py + Slash Commands + Embed
 """
@@ -14,7 +14,7 @@ import discord
 from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
-from google.genai import Client  # Updated Gemini import
+from google.genai import Client
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
@@ -40,7 +40,7 @@ Quy tắc tính cách:
 - Mục tiêu: khiến người nói chuyện cảm thấy được quan tâm, vui vẻ và thích thú khi trò chuyện.
 """
 
-# ========== KHỞI TẠO GEMINI ==========
+# ========== KHỞI TẠO GEMINI CLIENT ==========
 client = Client(api_key=GEMINI_API_KEY)
 
 # ========== DISCORD BOT ==========
@@ -92,10 +92,7 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
 
 @tree.command(name="deleteoldconversation", description="Xóa lịch sử hội thoại cũ của Phoebe 🧹")
 async def delete_conv(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        "🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖", 
-        ephemeral=True
-    )
+    await interaction.response.send_message("🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖", ephemeral=True)
 
 @tree.command(name="chat18plus", description="Bật/Tắt chế độ trò chuyện 18+ (flirt mạnh hơn nhưng safe)")
 async def chat18(interaction: discord.Interaction, enable: bool):
