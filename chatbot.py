@@ -14,7 +14,6 @@ import discord
 from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
-from google.genai import Client
 from google import genai
 
 # ========== CONFIG ==========
@@ -42,7 +41,7 @@ Quy tắc tính cách:
 """
 
 # ========== KHỞI TẠO GEMINI CLIENT ==========
-client = genai.Client(api_key='YOUR_API_KEY')
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # ========== DISCORD BOT ==========
 intents = discord.Intents.default()
