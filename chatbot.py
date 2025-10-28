@@ -65,6 +65,46 @@ async def chat18(interaction: discord.Interaction, enable: bool):
     msg = "🔞 Chế độ *flirt mạnh* đã bật~ Phobe sẽ tinh nghịch hơn 😚" if enable else "✨ Đã tắt chế độ flirt, Phoebe trở lại hiền lành, dễ thương 💞"
     await interaction.response.send_message(msg, ephemeral=True)
 
+@tree.command(name="hỏi", description="Hỏi Phoebe Xinh Đẹp bất cứ điều gì 💬")
+async def ask(interaction: discord.Interaction, cauhoi: str):
+    global flirt_enable
+    await interaction.response.defer(thinking=True)
+    answer = "⚠️ Đang có lỗi, thử lại sau."
+
+    try:
+        # Tạo chat trống với model Gemini
+        chat = client.chats.create(model="gemini-1.5-turbo")
+
+        # Thêm persona của Phoebe
+        chat.append_message(author="system", content=PHOBE_PERSONA)
+
+        # Thêm câu hỏi của người dùng
+        chat.append_message(author="user", content=cauhoi)
+
+        # Tạo response
+        response = chat.responses.create()
+
+        # Lấy text trả về
+        answer = response.output_text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
+
+    except Exception as e:
+        answer = f"⚠️ Lỗi Gemini: `{e}`"
+
+    # Tạo embed gửi trả lời
+    embed = discord.Embed(
+        title=f"{BOT_NAME} trả lời 💕",
+        description=f"**Người hỏi:** {interaction.user.mention}\n\n**Câu hỏi:** {cauhoi}\n\n**Phobe:** {answer}",
+        color=0xFF9CCC
+    )
+    embed.set_thumbnail(url=random.choice([
+        "https://files.catbox.moe/2474tj.png",
+        "https://files.catbox.moe/66v9vw.jpg",
+        "https://files.catbox.moe/ezqs00.jpg",
+        "https://files.catbox.moe/yow35q.png",
+        "https://files.catbox.moe/pzbhdp.jpg"
+    ]))
+    await interaction.followup.send(embed=embed)
+
 # ========== TRẠNG THÁI BOT ==========
 status_list = [
     "Ngủ đông với Phoebe 💜",
