@@ -97,21 +97,22 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     await interaction.response.defer(thinking=True)
 
     try:
+        # Tạo chat mới nếu chưa có
         if chat_context is None:
             chat_context = client.chats.create(model="gemini-1.5-turbo")
-            chat_context.append_message(author="system", content=PHOBE_PERSONA)
+            # Gửi persona một lần đầu tiên
+            chat_context.send_message(PHOBE_PERSONA, role="system")
 
-        chat_context.append_message(author="user", content=cauhoi)
-
-        # Dùng to_thread để tránh block event loop
+        # Gửi câu hỏi từ user
         response = await asyncio.wait_for(
-            asyncio.to_thread(lambda: chat_context.responses.create(
+            asyncio.to_thread(lambda: chat_context.send_message(
+                cauhoi,
                 temperature=0.9 if flirt_enable else 0.6
             )),
-            timeout=10
+            timeout=20
         )
 
-        answer = response.output_text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
+        answer = response.text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
     except asyncio.TimeoutError:
         answer = "⚠️ Gemini API mất quá lâu, thử lại sau."
