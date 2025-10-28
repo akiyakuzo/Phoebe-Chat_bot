@@ -98,34 +98,22 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     await interaction.response.defer(thinking=True)
 
     try:
-        # Tạo chat mới nếu chưa có
         if chat_context is None:
             chat_context = client.chats.create(model="models/gemini-2.5-flash")
-            # Gửi persona lần đầu
-            await asyncio.to_thread(lambda: chat_context.send_message(
-                types.Part(
-                    content=PHOBE_PERSONA,
-                    role="system"
-                )
-            ))
+            # Gửi persona lần đầu (chỉ gửi text)
+            await asyncio.to_thread(lambda: chat_context.send_message(PHOBE_PERSONA))
 
-        # Gửi câu hỏi từ user và nhận phản hồi
+        # Gửi câu hỏi user
         response = await asyncio.wait_for(
             asyncio.to_thread(lambda: chat_context.send_message(
-                types.Part(
-                    content=cauhoi,
-                    role="user",
-                    parameters={"temperature": 0.9 if flirt_enable else 0.6}
-                )
+                cauhoi,
+                parameters={"temperature": 0.9 if flirt_enable else 0.6}
             )),
             timeout=20
         )
 
-        # Lấy phản hồi từ response.parts
-        if hasattr(response, "parts") and response.parts:
-            answer = "".join([part.text for part in response.parts if part.type == "output_text"])
-        else:
-            answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
+        # Lấy text trả về
+        answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
     except asyncio.TimeoutError:
         answer = "⚠️ Gemini API mất quá lâu, thử lại sau."
