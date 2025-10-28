@@ -11,6 +11,7 @@ Flask + discord.py + Slash Commands + Embed
 import os
 import random
 import discord
+import asyncio
 from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
@@ -93,37 +94,33 @@ async def chat18(interaction: discord.Interaction, enable: bool):
 )
 async def ask(interaction: discord.Interaction, cauhoi: str):
     global flirt_enable, chat_context
+    await interaction.response.defer(thinking=True)
 
     try:
-        # defer để Discord biết bot đang trả lời
-        await interaction.response.defer(thinking=True)
-
-        # Khởi tạo chat context nếu chưa có
         if chat_context is None:
             chat_context = client.chats.create(model="gemini-1.5-turbo")
             chat_context.append_message(author="system", content=PHOBE_PERSONA)
 
-        # Thêm message từ user
         chat_context.append_message(author="user", content=cauhoi)
 
-        # Tạo response từ Gemini
-        response = chat_context.responses.create(
-            temperature=0.9 if flirt_enable else 0.6
+        # Dùng to_thread để tránh block event loop
+        response = await asyncio.wait_for(
+            asyncio.to_thread(lambda: chat_context.responses.create(
+                temperature=0.9 if flirt_enable else 0.6
+            )),
+            timeout=10
         )
 
         answer = response.output_text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
+    except asyncio.TimeoutError:
+        answer = "⚠️ Gemini API mất quá lâu, thử lại sau."
     except Exception as e:
         answer = f"⚠️ Lỗi Gemini: `{e}`"
 
-    # Tạo embed trả về
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
-        description=(
-            f"**Người hỏi:** {interaction.user.mention}\n\n"
-            f"**Câu hỏi:** {cauhoi}\n\n"
-            f"**Phobe:** {answer}"
-        ),
+        description=f"**Người hỏi:** {interaction.user.mention}\n\n**Câu hỏi:** {cauhoi}\n\n**Phobe:** {answer}",
         color=0xFF9CCC
     )
     embed.set_thumbnail(url=random.choice([
@@ -134,7 +131,6 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         "https://files.catbox.moe/pzbhdp.jpg"
     ]))
 
-    # Gửi follow-up để hoàn tất interaction
     await interaction.followup.send(embed=embed)
 
 # ========== TRẠNG THÁI BOT ==========
