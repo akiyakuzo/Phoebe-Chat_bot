@@ -99,7 +99,7 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     try:
         # Tạo chat mới nếu chưa có
         if chat_context is None:
-            chat_context = client.chats.create(model="gemini-1.5-turbo")
+            chat_context = client.chats.create(model="models/gemini-2.5-flash")
             # Gửi persona một lần đầu tiên (SDK mới tự hiểu đây là system)
             await asyncio.to_thread(lambda: chat_context.send_message(PHOBE_PERSONA))
 
