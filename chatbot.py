@@ -100,16 +100,16 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         # Tạo chat mới nếu chưa có
         if chat_context is None:
             chat_context = client.chats.create(model="gemini-1.5-turbo")
-            # Gửi persona một lần đầu tiên
-            chat_context.send_message(PHOBE_PERSONA, role="system")
+            # Gửi persona một lần đầu tiên (SDK mới tự hiểu đây là system)
+            await asyncio.to_thread(lambda: chat_context.send_message(PHOBE_PERSONA))
 
-        # Gửi câu hỏi từ user
+        # Gửi câu hỏi từ user và nhận phản hồi
         response = await asyncio.wait_for(
             asyncio.to_thread(lambda: chat_context.send_message(
                 cauhoi,
                 temperature=0.9 if flirt_enable else 0.6
             )),
-            timeout=20
+            timeout=15  # timeout 15 giây
         )
 
         answer = response.text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
