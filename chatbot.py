@@ -16,6 +16,7 @@ from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 from google import genai
+from google.genai import types  # dùng types.Part
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
@@ -101,16 +102,18 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         if chat_context is None:
             chat_context = client.chats.create(model="models/gemini-2.5-flash")
             # Gửi persona lần đầu
-            await asyncio.to_thread(lambda: chat_context.send_message({
-                "content": PHOBE_PERSONA
-            }))
+            await asyncio.to_thread(lambda: chat_context.send_message(
+                types.Part(content=PHOBE_PERSONA)
+            ))
 
         # Gửi câu hỏi từ user và nhận phản hồi
         response = await asyncio.wait_for(
-            asyncio.to_thread(lambda: chat_context.send_message({
-                "content": cauhoi,
-                "parameters": {"temperature": 0.9 if flirt_enable else 0.6}
-            })),
+            asyncio.to_thread(lambda: chat_context.send_message(
+                types.Part(
+                    content=cauhoi,
+                    parameters={"temperature": 0.9 if flirt_enable else 0.6}
+                )
+            )),
             timeout=20
         )
 
