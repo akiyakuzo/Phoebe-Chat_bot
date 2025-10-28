@@ -13,9 +13,9 @@ python3 -m pip install --upgrade pip setuptools wheel
 echo "📦 Installing required packages..."
 pip install --no-cache-dir -r requirements.txt
 
-# ==== Cài google generativeai từ GitHub ====
-echo "📦 Installing google generativeai from GitHub..."
-pip install --no-cache-dir git+https://github.com/google/generativeai-python.git@main
+# ==== Cài google generativeai từ PyPI stable ====  
+echo "📦 Installing google generativeai from PyPI..."  
+pip install --no-cache-dir google-genai>=1.46.0
 
 # ==== Xoá cache pip ====
 echo "🧹 Clearing pip cache..."
