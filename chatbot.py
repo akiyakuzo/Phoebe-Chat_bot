@@ -16,8 +16,6 @@ from flask import Flask
 from threading import Thread
 from google import genai
 
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
-
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
 TOKEN = os.getenv("TOKEN")
