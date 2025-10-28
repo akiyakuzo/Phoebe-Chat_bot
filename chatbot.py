@@ -1,3 +1,5 @@
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
+
 # ==== Patch cho Python 3.13 ====
 import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
@@ -52,40 +54,63 @@ tree = bot.tree
 # ========== TRẠNG THÁI FLIRT ==========
 flirt_enable = True
 
-# ========== SLASH COMMANDS ==========
 # Biến global lưu chat context
 chat_context = None
 
-@tree.command(name="deleteoldconversation", description="Xóa lịch sử hội thoại cũ của Phoebe 🧹")
+# Lấy Guild ID từ biến môi trường (nếu muốn deploy riêng cho 1 server)
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))  # 0 = global
+
+# ---------- Delete old conversation ----------
+@tree.command(
+    name="deleteoldconversation",
+    description="Xóa lịch sử hội thoại cũ của Phoebe 🧹",
+    guild_ids=[GUILD_ID] if GUILD_ID else None
+)
 async def delete_conv(interaction: discord.Interaction):
     global chat_context
     chat_context = None  # reset chat context Gemini
     await interaction.response.send_message(
-        "🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖", 
+        "🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖",
         ephemeral=True
     )
 
-@tree.command(name="chat18plus", description="Bật/Tắt chế độ trò chuyện 18+ (flirt mạnh hơn nhưng safe)")
+# ---------- Chat 18+ toggle ----------
+@tree.command(
+    name="chat18plus",
+    description="Bật/Tắt chế độ trò chuyện 18+ (flirt mạnh hơn nhưng safe)",
+    guild_ids=[GUILD_ID] if GUILD_ID else None
+)
 async def chat18(interaction: discord.Interaction, enable: bool):
     global flirt_enable
     flirt_enable = enable
-    msg = "🔞 Chế độ *flirt mạnh* đã bật~ Phobe sẽ tinh nghịch hơn 😚" if enable else "✨ Đã tắt chế độ flirt, Phoebe trở lại hiền lành, dễ thương 💞"
+    msg = (
+        "🔞 Chế độ *flirt mạnh* đã bật~ Phobe sẽ tinh nghịch hơn 😚"
+        if enable else
+        "✨ Đã tắt chế độ flirt, Phoebe trở lại hiền lành, dễ thương 💞"
+    )
     await interaction.response.send_message(msg, ephemeral=True)
 
-@tree.command(name="hỏi", description="Hỏi Phoebe Xinh Đẹp bất cứ điều gì 💬")
+# ---------- Hỏi Phoebe ----------
+@tree.command(
+    name="hỏi",
+    description="Hỏi Phoebe Xinh Đẹp bất cứ điều gì 💬",
+    guild_ids=[GUILD_ID] if GUILD_ID else None
+)
 async def ask(interaction: discord.Interaction, cauhoi: str):
     global flirt_enable, chat_context
     await interaction.response.defer(thinking=True)
     answer = "⚠️ Đang có lỗi, thử lại sau."
 
     try:
+        # Nếu chưa có chat_context, tạo mới
         if chat_context is None:
             chat_context = client.chats.create(model="gemini-1.5-turbo")
             chat_context.append_message(author="system", content=PHOBE_PERSONA)
 
+        # Thêm câu hỏi của user
         chat_context.append_message(author="user", content=cauhoi)
 
-        # ← Chỉnh sửa ở đây
+        # Tạo response với temperature theo chế độ flirt
         response = chat_context.responses.create(
             temperature=0.9 if flirt_enable else 0.6
         )
@@ -95,10 +120,14 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     except Exception as e:
         answer = f"⚠️ Lỗi Gemini: `{e}`"
 
-    # Tạo embed gửi trả lời
+    # Tạo embed trả lời
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
-        description=f"**Người hỏi:** {interaction.user.mention}\n\n**Câu hỏi:** {cauhoi}\n\n**Phobe:** {answer}",
+        description=(
+            f"**Người hỏi:** {interaction.user.mention}\n\n"
+            f"**Câu hỏi:** {cauhoi}\n\n"
+            f"**Phobe:** {answer}"
+        ),
         color=0xFF9CCC
     )
     embed.set_thumbnail(url=random.choice([
@@ -109,7 +138,7 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         "https://files.catbox.moe/pzbhdp.jpg"
     ]))
     await interaction.followup.send(embed=embed)
-
+    
 # ========== TRẠNG THÁI BOT ==========
 status_list = [
     "Ngủ đông với Phoebe 💜",
