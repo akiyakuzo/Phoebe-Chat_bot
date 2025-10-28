@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: PhoebeBot
+    env: python
+    branch: main
+    buildCommand: "./deploy.sh"
+    startCommand: "python chatbot.py"
+    pythonVersion: 3.11
+    autoDeploy: true
