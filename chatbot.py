@@ -14,7 +14,7 @@ import discord
 from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
-import google.genai as genai
+from google.genai import Client  # Updated Gemini import
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
@@ -41,7 +41,7 @@ Quy tắc tính cách:
 """
 
 # ========== KHỞI TẠO GEMINI ==========
-genai.configure(api_key=GEMINI_API_KEY)
+client = Client(api_key=GEMINI_API_KEY)
 
 # ========== DISCORD BOT ==========
 intents = discord.Intents.default()
@@ -62,16 +62,16 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     try:
         temperature = 0.9 if flirt_enable else 0.6
 
-        response = genai.chat(
+        response = client.chat.create(
             model="gemini-1.5-turbo",
             messages=[
-                {"role": "system", "content": PHOBE_PERSONA},
-                {"role": "user", "content": cauhoi}
+                {"author": "system", "content": PHOBE_PERSONA},
+                {"author": "user", "content": cauhoi}
             ],
             temperature=temperature
         )
 
-        answer = response.output_text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
+        answer = response.text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
     except Exception as e:
         answer = f"⚠️ Lỗi Gemini: `{e}`"
@@ -92,7 +92,10 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
 
 @tree.command(name="deleteoldconversation", description="Xóa lịch sử hội thoại cũ của Phoebe 🧹")
 async def delete_conv(interaction: discord.Interaction):
-    await interaction.response.send_message("🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖", ephemeral=True)
+    await interaction.response.send_message(
+        "🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖", 
+        ephemeral=True
+    )
 
 @tree.command(name="chat18plus", description="Bật/Tắt chế độ trò chuyện 18+ (flirt mạnh hơn nhưng safe)")
 async def chat18(interaction: discord.Interaction, enable: bool):
