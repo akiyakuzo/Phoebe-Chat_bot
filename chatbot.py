@@ -90,7 +90,7 @@ async def chat18(interaction: discord.Interaction, enable: bool):
 
 # ---------- Hỏi Phoebe ----------
 @tree.command(
-    name="hỏi",
+    name="hoi",
     description="Hỏi Phoebe Xinh Đẹp bất cứ điều gì 💬"
 )
 async def ask(interaction: discord.Interaction, cauhoi: str):
@@ -100,16 +100,12 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     try:
         # Tạo chat mới nếu chưa có
         if chat_context is None:
-            chat_context = client.chats.create(
-                model="models/gemini-2.5-flash",
-                # Bạn có thể đặt temperature mặc định ở đây
-                temperature=0.9 if flirt_enable else 0.6
-            )
+            chat_context = client.chats.create(model="models/gemini-2.5-flash")
             # Gửi persona lần đầu
             await asyncio.to_thread(lambda: chat_context.send_message(
                 types.Part(
                     content=PHOBE_PERSONA,
-                    role="system"  # phân biệt system message
+                    role="system"
                 )
             ))
 
@@ -118,15 +114,15 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
             asyncio.to_thread(lambda: chat_context.send_message(
                 types.Part(
                     content=cauhoi,
-                    role="user"  # user message
+                    role="user",
+                    parameters={"temperature": 0.9 if flirt_enable else 0.6}
                 )
             )),
             timeout=20
         )
 
-        # SDK Gemini trả về response.parts
+        # Lấy phản hồi từ response.parts
         if hasattr(response, "parts") and response.parts:
-            # nối text từ tất cả các part
             answer = "".join([part.text for part in response.parts if part.type == "output_text"])
         else:
             answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
