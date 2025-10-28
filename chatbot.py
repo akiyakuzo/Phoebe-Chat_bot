@@ -62,16 +62,12 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     try:
         temperature = 0.9 if flirt_enable else 0.6
 
+        # Gemini SDK mới chỉ cần 'prompt'
         response = client.chats.create(
             model="gemini-1.5-turbo",
-            input=[
-                {"author": "system", "content": PHOBE_PERSONA},
-                {"author": "user", "content": cauhoi}
-            ],
-            temperature=temperature
+            prompt=f"{PHOBE_PERSONA}\nNgười hỏi: {cauhoi}\nPhobe trả lời:"
         )
 
-        # Lấy text từ response mới
         answer = response.output_text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
     except Exception as e:
@@ -90,7 +86,6 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         "https://files.catbox.moe/pzbhdp.jpg"
     ]))
     await interaction.followup.send(embed=embed)
-
 
 @tree.command(name="deleteoldconversation", description="Xóa lịch sử hội thoại cũ của Phoebe 🧹")
 async def delete_conv(interaction: discord.Interaction):
