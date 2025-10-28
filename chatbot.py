@@ -88,8 +88,6 @@ async def chat18(interaction: discord.Interaction, enable: bool):
     await interaction.response.send_message(msg, ephemeral=True)
 
 # ---------- Hỏi Phoebe ----------
-from google.genai import types  # thêm import này ở đầu file nếu chưa có
-
 @tree.command(
     name="hoi",
     description="Hỏi Phoebe Xinh Đẹp bất cứ điều gì 💬"
@@ -102,20 +100,18 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         # Tạo chat mới nếu chưa có
         if chat_context is None:
             chat_context = client.chats.create(model="models/gemini-2.5-flash")
-            # Gửi persona một lần đầu tiên (SDK mới tự hiểu đây là system)
-            await asyncio.to_thread(lambda: chat_context.send_message(
-                types.Message(content=PHOBE_PERSONA)
-            ))
+            # Gửi persona lần đầu
+            await asyncio.to_thread(lambda: chat_context.send_message({
+                "content": PHOBE_PERSONA
+            }))
 
         # Gửi câu hỏi từ user và nhận phản hồi
         response = await asyncio.wait_for(
-            asyncio.to_thread(lambda: chat_context.send_message(
-                types.Message(
-                    content=cauhoi,
-                    parameters={"temperature": 0.9 if flirt_enable else 0.6}
-                )
-            )),
-            timeout=15  # timeout 15 giây
+            asyncio.to_thread(lambda: chat_context.send_message({
+                "content": cauhoi,
+                "parameters": {"temperature": 0.9 if flirt_enable else 0.6}
+            })),
+            timeout=20
         )
 
         answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
@@ -123,6 +119,7 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     except asyncio.TimeoutError:
         answer = "⚠️ Gemini API mất quá lâu, thử lại sau."
     except Exception as e:
+        print("⚠️ Gemini Exception:", e)
         answer = f"⚠️ Lỗi Gemini: `{e}`"
 
     embed = discord.Embed(
