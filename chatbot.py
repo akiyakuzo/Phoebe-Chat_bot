@@ -41,7 +41,7 @@ Quy tắc tính cách:
 """
 
 # ========== KHỞI TẠO GEMINI CLIENT ==========
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ========== DISCORD BOT ==========
 intents = discord.Intents.default()
@@ -91,9 +91,11 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     ]))
     await interaction.followup.send(embed=embed)
 
+
 @tree.command(name="deleteoldconversation", description="Xóa lịch sử hội thoại cũ của Phoebe 🧹")
 async def delete_conv(interaction: discord.Interaction):
     await interaction.response.send_message("🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖", ephemeral=True)
+
 
 @tree.command(name="chat18plus", description="Bật/Tắt chế độ trò chuyện 18+ (flirt mạnh hơn nhưng safe)")
 async def chat18(interaction: discord.Interaction, enable: bool):
