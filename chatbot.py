@@ -15,6 +15,7 @@ from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 from google.genai import Client
+from google import genai
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
@@ -41,7 +42,7 @@ Quy tắc tính cách:
 """
 
 # ========== KHỞI TẠO GEMINI CLIENT ==========
-client = Client(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key='YOUR_API_KEY')
 
 # ========== DISCORD BOT ==========
 intents = discord.Intents.default()
@@ -62,13 +63,12 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     try:
         temperature = 0.9 if flirt_enable else 0.6
     
-        response = client.chat.generate(
+        response = client.chats.create(
             model="gemini-1.5-turbo",
             messages=[
-                {"author": "system", "content": PHOBE_PERSONA},
-                {"author": "user", "content": cauhoi}
-            ],
-            temperature=temperature
+                {"role": "system", "content": "Bạn là Phoebe Xinh Đẹp 💖..."},
+                {"role": "user", "content": "Câu hỏi của người dùng"}
+            ]
         )
     
         # Lấy text từ response
