@@ -53,10 +53,17 @@ tree = bot.tree
 flirt_enable = True
 
 # ========== SLASH COMMANDS ==========
+# Biến global lưu chat context
+chat_context = None
+
 @tree.command(name="deleteoldconversation", description="Xóa lịch sử hội thoại cũ của Phoebe 🧹")
 async def delete_conv(interaction: discord.Interaction):
-    await interaction.response.send_message("🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖", ephemeral=True)
-
+    global chat_context
+    chat_context = None  # reset chat context Gemini
+    await interaction.response.send_message(
+        "🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖", 
+        ephemeral=True
+    )
 
 @tree.command(name="chat18plus", description="Bật/Tắt chế độ trò chuyện 18+ (flirt mạnh hơn nhưng safe)")
 async def chat18(interaction: discord.Interaction, enable: bool):
@@ -67,24 +74,22 @@ async def chat18(interaction: discord.Interaction, enable: bool):
 
 @tree.command(name="hỏi", description="Hỏi Phoebe Xinh Đẹp bất cứ điều gì 💬")
 async def ask(interaction: discord.Interaction, cauhoi: str):
-    global flirt_enable
+    global flirt_enable, chat_context
     await interaction.response.defer(thinking=True)
     answer = "⚠️ Đang có lỗi, thử lại sau."
 
     try:
-        # Tạo chat trống với model Gemini
-        chat = client.chats.create(model="gemini-1.5-turbo")
+        if chat_context is None:
+            chat_context = client.chats.create(model="gemini-1.5-turbo")
+            chat_context.append_message(author="system", content=PHOBE_PERSONA)
 
-        # Thêm persona của Phoebe
-        chat.append_message(author="system", content=PHOBE_PERSONA)
+        chat_context.append_message(author="user", content=cauhoi)
 
-        # Thêm câu hỏi của người dùng
-        chat.append_message(author="user", content=cauhoi)
+        # ← Chỉnh sửa ở đây
+        response = chat_context.responses.create(
+            temperature=0.9 if flirt_enable else 0.6
+        )
 
-        # Tạo response
-        response = chat.responses.create()
-
-        # Lấy text trả về
         answer = response.output_text or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
     except Exception as e:
