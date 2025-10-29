@@ -130,10 +130,23 @@ async def change_status():
 
 # ========== FLASK KEEPALIVE ==========
 app = Flask(__name__)
-@app.route("/healthz")
-def home(): return f"💖 {BOT_NAME} is online~"
 
-def run_flask(): app.run(host="0.0.0.0", port=10000)
+@app.route("/healthz")
+def healthz():
+    return f"💖 {BOT_NAME} is online and feeling cute~"
+
+# Route "/" trả về giống /healthz hoặc redirect
+@app.route("/")
+def index():
+    return redirect("/healthz")  # Chuyển hướng sang healthz
+    # Hoặc nếu muốn, bạn có thể return trực tiếp:
+    # return f"💖 {BOT_NAME} is online and feeling cute~"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+
+# Khởi chạy Flask trong thread riêng
+from threading import Thread
 Thread(target=run_flask, daemon=True).start()
 
 # ========== BOT START ==========
