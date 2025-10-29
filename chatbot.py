@@ -106,7 +106,7 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     await interaction.response.defer(thinking=True)
 
     try:
-        # ... (Tạo prompt và context - Giữ nguyên) ...
+        # 1. Tạo prompt và context
         instruction = (
             PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
         )
@@ -118,31 +118,31 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
                 system_instruction=final_prompt
             )
 
-        # ... (Gửi câu hỏi và wait_for - Giữ nguyên) ...
+        # 2. Gửi câu hỏi với Timeout
         try:
             response = await asyncio.wait_for(
                 asyncio.to_thread(lambda: chat_context.send_message(cauhoi)),
                 timeout=25
             )
         except asyncio.TimeoutError:
-            # Xử lý Timeout (nên reset context ở đây)
+            # Xử lý Timeout (reset context)
             global chat_context
             chat_context = None 
             await interaction.followup.send(
-                "⚠️ Gemini phản hồi quá chậm... hãy thử lại sau nhé! **Phobe đã bị reset trí nhớ.**",
+                "⚠️ Gemini phản hồi quá chậm... **Phobe đã bị reset trí nhớ.** Hãy thử lại sau nhé!",
                 ephemeral=True
             )
             return
-        
-        # 🧠 4. Lấy câu trả lời
+
+        # 3. Lấy câu trả lời
         answer_text = response.text if hasattr(response, "text") else str(response)
         if not answer_text.strip():
             answer_text = "Hmm... hình như Phoebe hơi bối rối, bạn hỏi lại nhé? 🥺"
 
-        # 💬 5. Gửi PHẢN HỒI DUY NHẤT (dưới dạng Embed)
+        # 4. Gửi PHẢN HỒI DUY NHẤT (dưới dạng Embed)
         embed = discord.Embed(
             title=f"{BOT_NAME} trả lời 💕",
-            description=f"**Người hỏi:** {interaction.user.mention}\n\n**Câu hỏi:** {cauhoi}\n\n**Phobe:** {answer_text}", # Dùng answer_text
+            description=f"**Người hỏi:** {interaction.user.mention}\n\n**Câu hỏi:** {cauhoi}\n\n**Phobe:** {answer_text}",
             color=0xFFC0CB
         )
         embed.set_thumbnail(url=random.choice([
@@ -152,11 +152,14 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
             "https://files.catbox.moe/yow35q.png",
             "https://files.catbox.moe/pzbhdp.jpg"
         ]))
-        
-        await interaction.followup.send(embed=embed) # Gửi Embed duy nhất này
+
+        await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        # ❗ 6. Xử lý lỗi chung (chỉ gửi lỗi một lần)
+        # 5. Xử lý Lỗi Chung: Reset context và gửi lỗi
+        global chat_context
+        chat_context = None # <--- THÊM: Reset context sau lỗi không xác định
+        
         error_msg = f"⚠️ Lỗi Gemini: `{str(e)}`"
         print(error_msg)
         await interaction.followup.send(error_msg, ephemeral=True)
