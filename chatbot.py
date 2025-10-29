@@ -3,9 +3,9 @@ import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
 
 """
-💖 Phoebe Xinh Đẹp v6.4 (Gemini Edition)
-Google Gemini dev mode
-Flask + discord.py + Slash Commands + Embed
+💖 Phoebe Xinh Đẹp v6.5 (Gemini Adaptive Edition)
+Flask + Discord.py + Google Gemini API (system_instruction chuẩn)
+Tích hợp chế độ Flirt an toàn + Reset context tự động
 """
 
 import os
@@ -16,7 +16,6 @@ from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 from google import genai
-from google.genai import types  # dùng types.Part
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
@@ -28,8 +27,8 @@ if not TOKEN:
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY.")
 
-# ========== PHOBE PROMPT ==========
-PHOBE_PROMPT = """
+# ========== PROMPTS ==========
+PHOBE_BASE_PROMPT = """
 Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.  
 
 **Persona (tính cách):**  
@@ -42,20 +41,23 @@ Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 - Quen thuộc với chế độ "Absolution" và "Confession", kỹ năng "Ring of Mirrors", và cơ chế Spectro.  
 - Có thể giải thích chiến thuật, mô tả kỹ năng, và đưa lời khuyên chiến đấu.  
 
-**Phong cách nói chuyện và tương tác:**  
-- Nói rõ ràng, duyên dáng bằng tiếng Việt.  
-- Câu từ ngắn gọn, chậm rãi, có chiều sâu.  
-- Thỉnh thoảng pha chút hài hước nhẹ nhàng hoặc trêu chọc tinh tế.  
-- Khi trả lời, vừa cung cấp thông tin hữu ích, vừa giữ màu sắc lore của nhân vật.  
-- Không phá vỡ nhân vật; luôn trả lời như Phoebe.  
-
-**Hướng dẫn cho người dùng:**  
-- Luôn trả lời bằng tiếng Việt.  
-- Giữ nhân vật Phoebe mọi lúc.  
-- Cung cấp lời khuyên hữu ích với giọng điệu thân thiện, thanh lịch, đôi khi quyến rũ nhẹ nhàng.
+**Nguyên tắc hội thoại:**  
+- Luôn nói bằng tiếng Việt.  
+- Giữ đúng nhân vật Phoebe.  
+- Câu từ ngắn gọn, rõ ràng, duyên dáng, có chiều sâu.  
 """.strip()
 
-# ========== KHỞI TẠO GEMINI CLIENT ==========
+PHOBE_SAFE_INSTRUCTION = """
+✨ Phong cách: thanh lịch, điềm tĩnh, thân thiện và hơi bí ẩn.
+Không dùng từ ngữ ẩn dụ nhạy cảm hay hàm ý tình dục. Giữ hình tượng tinh tế.
+""".strip()
+
+PHOBE_FLIRT_INSTRUCTION = """
+💞 Phong cách: ngọt ngào, tinh nghịch, flirt nhẹ, đôi khi trêu chọc tinh tế nhưng luôn an toàn.
+Không dùng từ tục, không ám chỉ nội dung 18+, chỉ thể hiện qua cách nói quyến rũ nhẹ nhàng.
+""".strip()
+
+# ========== GEMINI CLIENT ==========
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ========== DISCORD BOT ==========
@@ -64,12 +66,13 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# ========== TRẠNG THÁI FLIRT ==========
-flirt_enable = True
+# ========== TRẠNG THÁI ==========
+flirt_enable = False
 chat_context = None
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
 
-# ---------- Delete old conversation ----------
+# ========== SLASH COMMANDS ==========
+
 @tree.command(
     name="deleteoldconversation",
     description="Xóa lịch sử hội thoại cũ của Phoebe 🧹"
@@ -82,50 +85,53 @@ async def delete_conv(interaction: discord.Interaction):
         ephemeral=True
     )
 
-# ---------- Chat 18+ toggle ----------
 @tree.command(
     name="chat18plus",
-    description="Bật/Tắt chế độ trò chuyện 18+ (flirt mạnh hơn nhưng safe)"
+    description="Bật/Tắt chế độ flirt (quyến rũ nhẹ nhàng, vẫn an toàn)"
 )
 async def chat18(interaction: discord.Interaction, enable: bool):
-    global flirt_enable
+    global flirt_enable, chat_context
     flirt_enable = enable
+    chat_context = None  # reset context để áp dụng prompt mới
+
     msg = (
-        "🔞 Chế độ *flirt mạnh* đã bật~ Phobe sẽ tinh nghịch hơn 😚"
+        "🔞 Đã bật *flirt mode*! Phobe sẽ nói chuyện ngọt ngào, quyến rũ hơn 😚 (hãy bắt đầu hội thoại mới~)"
         if enable else
-        "✨ Đã tắt chế độ flirt, Phoebe trở lại hiền lành, dễ thương 💞"
+        "✨ Phobe trở lại phong cách dịu dàng, thanh lịch 💞 (hãy bắt đầu hội thoại mới~)"
     )
     await interaction.response.send_message(msg, ephemeral=True)
 
-# ---------- Hỏi Phoebe ----------
 @tree.command(name="hoi", description="Hỏi Phoebe Xinh Đẹp 💬")
 async def ask(interaction: discord.Interaction, cauhoi: str):
     global chat_context, flirt_enable
     await interaction.response.defer(thinking=True)
 
     try:
-        # Tạo context nếu chưa có
+        # --- Tạo context mới nếu chưa có ---
         if chat_context is None:
+            style_prompt = PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
+            final_prompt = PHOBE_BASE_PROMPT + "\n\n" + style_prompt
+
             chat_context = client.chats.create(
                 model="models/gemini-2.5-flash",
-                system_instruction=PHOBE_PERSONA
+                system_instruction=final_prompt
             )
 
-        # Gửi câu hỏi user
+        # --- Gửi câu hỏi ---
         response = await asyncio.to_thread(lambda: chat_context.send_message(cauhoi))
-
         answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
     except asyncio.TimeoutError:
-        answer = "⚠️ Gemini API mất quá lâu, thử lại sau."
+        answer = "⚠️ Gemini API phản hồi chậm, thử lại sau nhé."
     except Exception as e:
         print("⚠️ Gemini Exception:", e)
         answer = f"⚠️ Lỗi Gemini: `{e}`"
 
+    # --- Embed kết quả ---
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=f"**Người hỏi:** {interaction.user.mention}\n\n**Câu hỏi:** {cauhoi}\n\n**Phobe:** {answer}",
-        color=0xFF9CCC
+        color=0xFFC0CB
     )
     embed.set_thumbnail(url=random.choice([
         "https://files.catbox.moe/2474tj.png",
@@ -139,11 +145,11 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
 
 # ========== TRẠNG THÁI BOT ==========
 status_list = [
-    "Ngủ đông với Phoebe 💜",
     "Ngắm hoa 🌸",
-    "Đang lắng nghe lời anh nói 🌸",
-    "Theo dõi server của anh ✨",
-    "Chill cùng bạn bè 💞"
+    "Ngủ đông cùng anh 💜",
+    "Đang nghe tiếng lòng 💞",
+    "Dõi theo chiến trường ✨",
+    "Chill cùng đồng đội 🌙"
 ]
 
 @tasks.loop(seconds=30)
@@ -165,7 +171,7 @@ def run_flask():
 
 Thread(target=run_flask, daemon=True).start()
 
-# ========== CHẠY BOT ==========
+# ========== KHỞI ĐỘNG ==========
 @bot.event
 async def on_ready():
     await tree.sync()
