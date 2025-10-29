@@ -39,7 +39,7 @@ Quy tắc tính cách:
 - Giữ phong cách quyến rũ, dâm đảng kiểu cute nhưng an toàn cho Discord public. 
 - Dùng ngôi xưng “em” hoặc “Phobe”, gọi người đối diện là “anh” hoặc “nè”. 
 - Mục tiêu: khiến người nói chuyện cảm thấy được quan tâm, vui vẻ và thích thú khi trò chuyện.
-""".strip()  # strip loại newline thừa
+""".strip()
 
 # ========== KHỞI TẠO GEMINI CLIENT ==========
 client = genai.Client(api_key=GEMINI_API_KEY)
@@ -54,7 +54,7 @@ tree = bot.tree
 flirt_enable = True
 chat_context = None
 
-# Lấy Guild ID từ biến môi trường (0 = global)
+# Guild ID (0 = global)
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
 
 # ---------- Delete old conversation ----------
@@ -95,18 +95,21 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     await interaction.response.defer(thinking=True)
 
     try:
-        # Tạo chat mới nếu chưa có hoặc muốn reset temperature
+        # Tạo chat mới nếu chưa có
         if chat_context is None:
-            temp = 0.9 if flirt_enable else 0.6
-            chat_context = client.chats.create(
-                model="models/gemini-2.5-flash",
-                temperature=temp
-            )
+            chat_context = client.chats.create(model="models/gemini-2.5-flash")
             # Gửi persona lần đầu
-            await asyncio.to_thread(lambda: chat_context.send_message(PHOBE_PERSONA))
+            await asyncio.to_thread(lambda: chat_context.send_message({
+                "content": PHOBE_PERSONA
+            }))
 
-        # Gửi câu hỏi user
-        response = await asyncio.to_thread(lambda: chat_context.send_message(cauhoi))
+        # Gửi câu hỏi từ user
+        user_question = cauhoi.strip()
+        response = await asyncio.to_thread(lambda: chat_context.send_message({
+            "content": user_question,
+            "temperature": 0.9 if flirt_enable else 0.6
+        }))
+
         answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
     except asyncio.TimeoutError:
