@@ -102,46 +102,48 @@ async def chat18(interaction: discord.Interaction, enable: bool):
 
 @tree.command(name="hoi", description="Hỏi Phoebe Xinh Đẹp 💬")
 async def ask(interaction: discord.Interaction, cauhoi: str):
-    global chat_context, flirt_enable
+    global chat_context, flirt_enable  # ✅ KHAI BÁO DUY NHẤT Ở ĐÂY
     await interaction.response.defer(thinking=True)
 
     try:
         # 1. Tạo prompt và context
-        instruction = (
-            PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
-        )
+        instruction = PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
         final_prompt = PHOBE_BASE_PROMPT + "\n\n" + instruction
 
         if chat_context is None:
-            # ✅ FIX: system_instruction phải là dict có parts
+            # ✅ Tạo session Gemini mới khi chưa có
             chat_context = client.chats.create(
                 model="models/gemini-2.0-flash",
                 system_instruction={"parts": [{"text": final_prompt}]}
             )
 
-        # 2. Gửi câu hỏi với Timeout
+        # 2. Gửi câu hỏi (có timeout)
         try:
             response = await asyncio.wait_for(
                 asyncio.to_thread(lambda: chat_context.send_message(cauhoi)),
                 timeout=25
             )
         except asyncio.TimeoutError:
-            chat_context = None   # ✅ không cần global ở đây nữa
+            chat_context = None   # ❌ KHÔNG CẦN GLOBAL Ở ĐÂY
             await interaction.followup.send(
                 "⚠️ Gemini phản hồi quá chậm... **Phobe đã bị reset trí nhớ.** Hãy thử lại sau nhé!",
                 ephemeral=True
             )
             return
 
-        # 3. Lấy câu trả lời
+        # 3. Xử lý câu trả lời
         answer_text = response.text if hasattr(response, "text") else str(response)
         if not answer_text.strip():
             answer_text = "Hmm... hình như Phoebe hơi bối rối, bạn hỏi lại nhé? 🥺"
 
-        # 4. Gửi PHẢN HỒI DUY NHẤT (dưới dạng Embed)
+        # 4. Gửi phản hồi duy nhất (embed)
         embed = discord.Embed(
             title=f"{BOT_NAME} trả lời 💕",
-            description=f"**Người hỏi:** {interaction.user.mention}\n\n**Câu hỏi:** {cauhoi}\n\n**Phobe:** {answer_text}",
+            description=(
+                f"**Người hỏi:** {interaction.user.mention}\n\n"
+                f"**Câu hỏi:** {cauhoi}\n\n"
+                f"**Phobe:** {answer_text}"
+            ),
             color=0xFFC0CB
         )
         embed.set_thumbnail(url=random.choice([
@@ -155,8 +157,7 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        global chat_context
-        chat_context = None
+        chat_context = None   # ❌ KHÔNG CẦN GLOBAL Ở ĐÂY
         error_msg = f"⚠️ Lỗi Gemini: `{str(e)}`"
         print(error_msg)
         await interaction.followup.send(error_msg, ephemeral=True)
