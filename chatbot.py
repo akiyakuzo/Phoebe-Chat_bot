@@ -3,8 +3,8 @@ import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
 
 """
-💖 Phoebe Xinh Đẹp v6.5 (Gemini Adaptive Edition)
-Flask + Discord.py + Google Gemini API (system_instruction chuẩn)
+💖 Phoebe Xinh Đẹp v6.6 (Gemini Adaptive Edition — FIXED)
+Flask + Discord.py + Google Gemini API (system_instruction chuẩn dạng dict)
 Tích hợp chế độ Flirt an toàn + Reset context tự động
 """
 
@@ -113,9 +113,10 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         final_prompt = PHOBE_BASE_PROMPT + "\n\n" + instruction
 
         if chat_context is None:
+            # ✅ FIX: system_instruction phải là dict có parts
             chat_context = client.chats.create(
                 model="models/gemini-2.0-flash",
-                system_instruction=final_prompt
+                system_instruction={"parts": [{"text": final_prompt}]}
             )
 
         # 2. Gửi câu hỏi với Timeout
@@ -125,7 +126,6 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
                 timeout=25
             )
         except asyncio.TimeoutError:
-            # Xử lý Timeout (reset context)
             global chat_context
             chat_context = None 
             await interaction.followup.send(
@@ -156,10 +156,8 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        # 5. Xử lý Lỗi Chung: Reset context và gửi lỗi
         global chat_context
-        chat_context = None # <--- THÊM: Reset context sau lỗi không xác định
-        
+        chat_context = None
         error_msg = f"⚠️ Lỗi Gemini: `{str(e)}`"
         print(error_msg)
         await interaction.followup.send(error_msg, ephemeral=True)
