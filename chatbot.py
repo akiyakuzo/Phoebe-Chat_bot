@@ -33,9 +33,9 @@ Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 **Nguyên tắc hội thoại:** luôn nói bằng tiếng Việt, rõ ràng, duyên dáng, có chiều sâu.
 """.strip()
 
-# Ép AI trả lời ngắn gọn, 50 từ, không dùng dấu ngoặc
-PHOBE_SAFE_INSTRUCTION = "✨ Phong cách: thanh lịch, điềm tĩnh, thân thiện, hơi bí ẩn. Trả lời ngắn gọn, tối đa 50 từ, không dùng dấu ngoặc."
-PHOBE_FLIRT_INSTRUCTION = "💞 Phong cách: ngọt ngào,dễ thương, tinh nghịch, flirt hơi mạnh nhưng an toàn. Trả lời ngắn gọn, tối đa 50 từ, không dùng dấu ngoặc."
+# Ép AI trả lời ngắn gọn, 100 từ, không dùng dấu ngoặc
+PHOBE_SAFE_INSTRUCTION = "✨ Phong cách: thanh lịch, điềm tĩnh, thân thiện, hơi bí ẩn. Trả lời ngắn gọn, tối đa 100 từ,Trả lời tự nhiên, không dùng dấu ngoặc."
+PHOBE_FLIRT_INSTRUCTION = "💞 Phong cách: ngọt ngào,dễ thương, tinh nghịch, flirt hơi mạnh nhưng an toàn. Trả lời ngắn gọn, tối đa 100 từ, Trả lời tự nhiên, không dùng dấu ngoặc."
 
 # ========== GEMINI CLIENT ==========
 client = genai.Client(api_key=GEMINI_API_KEY)
