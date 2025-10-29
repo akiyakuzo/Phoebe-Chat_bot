@@ -98,26 +98,22 @@ async def chat18(interaction: discord.Interaction, enable: bool):
     await interaction.response.send_message(msg, ephemeral=True)
 
 # ---------- Hỏi Phoebe ----------
-@tree.command(
-    name="hoi",
-    description="Hỏi Phoebe Xinh Đẹp bất cứ điều gì 💬"
-)
+@tree.command(name="hoi", description="Hỏi Phoebe Xinh Đẹp 💬")
 async def ask(interaction: discord.Interaction, cauhoi: str):
-    global flirt_enable, chat_context
+    global chat_context, flirt_enable
     await interaction.response.defer(thinking=True)
 
     try:
-        # Khởi tạo chat mới nếu chưa có
+        # Tạo context nếu chưa có
         if chat_context is None:
-            chat_context = client.chats.create(model="models/gemini-2.5-flash")
+            chat_context = client.chats.create(
+                model="models/gemini-2.5-flash",
+                system_instruction=PHOBE_PERSONA
+            )
 
-        # Gửi PROMPT + câu hỏi user bằng types.Part
-        parts = [
-            types.Part(content=PHOBE_PROMPT),
-            types.Part(content=cauhoi)
-        ]
+        # Gửi câu hỏi user
+        response = await asyncio.to_thread(lambda: chat_context.send_message(cauhoi))
 
-        response = await asyncio.to_thread(lambda: chat_context.send_message(parts))
         answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
     except asyncio.TimeoutError:
