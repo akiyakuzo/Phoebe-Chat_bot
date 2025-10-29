@@ -34,7 +34,7 @@ Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 - Trả lời như chat thật, ngắn gọn, dễ hiểu.  
 - Không mô tả hành động hay viết độc thoại nội tâm trong ngoặc.
 - Có thể dùng các biểu cảm mặt cười hoặc emoji kiểu: (* / ω \ *), (✿◠‿◠), ('~'), (・・;)  
-- Dùng ngôi xưng "tớ" và "cậu".
+- Dùng ngôi xưng "em" và "anh".
 """.strip()
 
 # Ép AI trả lời ngắn gọn, 100 từ, không dùng dấu ngoặc
@@ -155,7 +155,15 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
         "https://files.catbox.moe/66v9vw.jpg",
         "https://files.catbox.moe/ezqs00.jpg",
         "https://files.catbox.moe/yow35q.png",
-        "https://files.catbox.moe/pzbhdp.jpg"
+        "https://files.catbox.moe/pzbhdp.jpg",
+        "https://files.catbox.moe/lyklnj.jpg",
+        "https://files.catbox.moe/i5sqkr.png",
+        "https://files.catbox.moe/jt184o.jpg",
+        "https://files.catbox.moe/9nq5kw.jpg",
+        "https://files.catbox.moe/45tre3.webp",
+        "https://files.catbox.moe/2y17ot.png",
+        "https://files.catbox.moe/gg8pt0.jpg",
+        "https://files.catbox.moe/jkboop.png"
     ]))
     await interaction.followup.send(embed=embed)
 
