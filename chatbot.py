@@ -3,7 +3,7 @@ import sys, types, os, json, random, asyncio
 sys.modules['audioop'] = types.ModuleType('audioop')
 
 """
-💖 Phoebe Xinh Đẹp v6.7 Persistent + Token Limit
+💖 Phoebe Xinh Đẹp v6.8 Hoàn Chỉnh (Stateless Persistent + Fix Token Error)
 Flask + Discord.py + Google Gemini API
 """
 
@@ -19,8 +19,8 @@ TOKEN = os.getenv("TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
 SESSIONS_FILE = "sessions.json"
-HISTORY_LIMIT = 10
-MAX_OUTPUT_TOKENS = 250  # Giới hạn số token trả về
+
+HISTORY_LIMIT = 10  # Giới hạn 10 tin nhắn gần nhất
 
 if not TOKEN or not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu TOKEN hoặc GEMINI_API_KEY!")
@@ -33,8 +33,9 @@ Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 **Nguyên tắc hội thoại:** luôn nói bằng tiếng Việt, rõ ràng, duyên dáng, có chiều sâu.
 """.strip()
 
-PHOBE_SAFE_INSTRUCTION = "✨ Phong cách: thanh lịch, điềm tĩnh, thân thiện, hơi bí ẩn. Không dùng từ nhạy cảm."
-PHOBE_FLIRT_INSTRUCTION = "💞 Phong cách: ngọt ngào, tinh nghịch, flirt nhẹ nhưng an toàn."
+# Ép AI trả lời ngắn gọn, 20 từ, không dùng dấu ngoặc
+PHOBE_SAFE_INSTRUCTION = "✨ Phong cách: thanh lịch, điềm tĩnh, thân thiện, hơi bí ẩn. Trả lời ngắn gọn, tối đa 20 từ, không dùng dấu ngoặc."
+PHOBE_FLIRT_INSTRUCTION = "💞 Phong cách: ngọt ngào, tinh nghịch, flirt nhẹ nhưng an toàn. Trả lời ngắn gọn, tối đa 20 từ, không dùng dấu ngoặc."
 
 # ========== GEMINI CLIENT ==========
 client = genai.Client(api_key=GEMINI_API_KEY)
@@ -80,36 +81,34 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
         session = {"system_prompt": full_system_prompt, "history": []}
         user_contexts[user_id] = session
 
-    # Auto-prune
+    # Auto-Prune
     if len(session["history"]) >= HISTORY_LIMIT:
         session["history"] = session["history"][-HISTORY_LIMIT:]
 
     # Thêm câu hỏi user
     session["history"].append({"role": "user", "content": user_input})
 
-    # Xây dựng prompt cuối cùng
+    # Xây dựng prompt tổng hợp
     memory_text = "\n".join([f"{msg['role'].title()}: {msg['content']}" for msg in session["history"]])
     full_prompt_to_send = (
         f"{session['system_prompt']}\n\n"
-        f"--- Lịch sử hội thoại (Chỉ {len(session['history'])} tin nhắn gần nhất) ---\n"
+        f"--- Lịch sử hội thoại ({len(session['history'])} tin nhắn gần nhất) ---\n"
         f"{memory_text}\n"
         f"--- Kết thúc lịch sử ---\n\n"
-        f"Phoebe, hãy trả lời tin nhắn cuối cùng (User: {user_input}) dựa trên lịch sử trên:"
+        f"Phoebe, trả lời tin nhắn cuối cùng (User: {user_input}) dựa trên lịch sử trên:"
     )
 
     try:
-        response = await asyncio.wait_for(
-            asyncio.to_thread(lambda: client.models.generate_content(
-                model="models/gemini-2.0-flash",
-                contents=[full_prompt_to_send],
-                max_output_tokens=MAX_OUTPUT_TOKENS
-            )),
-            timeout=25
-        )
+        # Stateless API
+        response = await asyncio.to_thread(lambda: client.models.generate_content(
+            model="models/gemini-2.0-flash",
+            contents=[full_prompt_to_send]  # Không dùng max_output_tokens
+        ))
         answer = getattr(response, "text", str(response))
         if not answer.strip():
             answer = "Hmm... Phoebe hơi bối rối, bạn hỏi lại nhé? 🥺"
 
+        # Thêm vào history và lưu
         session["history"].append({"role": "phoebe", "content": answer})
         save_sessions()
         return answer
@@ -119,7 +118,6 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             session["history"].pop()
         user_contexts.pop(user_id, None)
         save_sessions()
-
         if isinstance(e, asyncio.TimeoutError):
             return "⚠️ Gemini phản hồi quá chậm, session đã reset, thử lại sau nhé!"
         else:
@@ -132,7 +130,6 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
     user_id = str(interaction.user.id)
     await interaction.response.defer(thinking=True)
     answer = await ask_gemini(user_id, cauhoi)
-
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {answer}",
