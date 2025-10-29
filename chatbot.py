@@ -103,71 +103,63 @@ async def chat18(interaction: discord.Interaction, enable: bool):
 @tree.command(name="hoi", description="Hỏi Phoebe Xinh Đẹp 💬")
 async def ask(interaction: discord.Interaction, cauhoi: str):
     global chat_context, flirt_enable
-
-    # 🕐 1. Gửi defer sớm để Discord biết bot đang xử lý
     await interaction.response.defer(thinking=True)
 
     try:
-        # 🔁 2. Tạo prompt tùy theo chế độ flirt
+        # ... (Tạo prompt và context - Giữ nguyên) ...
         instruction = (
             PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
         )
         final_prompt = PHOBE_BASE_PROMPT + "\n\n" + instruction
 
-        # 📚 3. Nếu chưa có context hoặc vừa đổi chế độ, tạo lại session Gemini
         if chat_context is None:
             chat_context = client.chats.create(
-                model="models/gemini-2.0-flash",   # ⚡ nhanh, ổn định hơn 2.5
+                model="models/gemini-2.0-flash",
                 system_instruction=final_prompt
             )
 
-        # 🧠 4. Gửi câu hỏi và đo thời gian phản hồi
-        import time
-        start_time = time.time()
-
+        # ... (Gửi câu hỏi và wait_for - Giữ nguyên) ...
         try:
             response = await asyncio.wait_for(
                 asyncio.to_thread(lambda: chat_context.send_message(cauhoi)),
-                timeout=25  # ⏳ giới hạn tối đa 25s
+                timeout=25
             )
         except asyncio.TimeoutError:
+            # Xử lý Timeout (nên reset context ở đây)
+            global chat_context
+            chat_context = None 
             await interaction.followup.send(
-                "⚠️ Gemini phản hồi quá chậm... hãy thử lại sau nhé!",
+                "⚠️ Gemini phản hồi quá chậm... hãy thử lại sau nhé! **Phobe đã bị reset trí nhớ.**",
                 ephemeral=True
             )
             return
+        
+        # 🧠 4. Lấy câu trả lời
+        answer_text = response.text if hasattr(response, "text") else str(response)
+        if not answer_text.strip():
+            answer_text = "Hmm... hình như Phoebe hơi bối rối, bạn hỏi lại nhé? 🥺"
 
-        elapsed = time.time() - start_time
-        print(f"⏱️ Gemini took {elapsed:.2f}s to respond.")
-
-        # 💬 5. Trả lời lại Discord
-        message_text = response.text if hasattr(response, "text") else str(response)
-        if not message_text.strip():
-            message_text = "Hmm... hình như Phoebe hơi bối rối, bạn hỏi lại nhé? 🥺"
-
-        await interaction.followup.send(f"**Phobe:** {message_text}")
+        # 💬 5. Gửi PHẢN HỒI DUY NHẤT (dưới dạng Embed)
+        embed = discord.Embed(
+            title=f"{BOT_NAME} trả lời 💕",
+            description=f"**Người hỏi:** {interaction.user.mention}\n\n**Câu hỏi:** {cauhoi}\n\n**Phobe:** {answer_text}", # Dùng answer_text
+            color=0xFFC0CB
+        )
+        embed.set_thumbnail(url=random.choice([
+            "https://files.catbox.moe/2474tj.png",
+            "https://files.catbox.moe/66v9vw.jpg",
+            "https://files.catbox.moe/ezqs00.jpg",
+            "https://files.catbox.moe/yow35q.png",
+            "https://files.catbox.moe/pzbhdp.jpg"
+        ]))
+        
+        await interaction.followup.send(embed=embed) # Gửi Embed duy nhất này
 
     except Exception as e:
-        # ❗ 6. Xử lý lỗi chung (validation, network, v.v.)
+        # ❗ 6. Xử lý lỗi chung (chỉ gửi lỗi một lần)
         error_msg = f"⚠️ Lỗi Gemini: `{str(e)}`"
         print(error_msg)
         await interaction.followup.send(error_msg, ephemeral=True)
-
-    # --- Embed kết quả ---
-    embed = discord.Embed(
-        title=f"{BOT_NAME} trả lời 💕",
-        description=f"**Người hỏi:** {interaction.user.mention}\n\n**Câu hỏi:** {cauhoi}\n\n**Phobe:** {answer}",
-        color=0xFFC0CB
-    )
-    embed.set_thumbnail(url=random.choice([
-        "https://files.catbox.moe/2474tj.png",
-        "https://files.catbox.moe/66v9vw.jpg",
-        "https://files.catbox.moe/ezqs00.jpg",
-        "https://files.catbox.moe/yow35q.png",
-        "https://files.catbox.moe/pzbhdp.jpg"
-    ]))
-
-    await interaction.followup.send(embed=embed)
 
 # ========== TRẠNG THÁI BOT ==========
 status_list = [
