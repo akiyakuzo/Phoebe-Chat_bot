@@ -16,6 +16,7 @@ from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 from google import genai
+from google.genai import types
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
@@ -97,18 +98,20 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     try:
         # Tạo chat mới nếu chưa có
         if chat_context is None:
-            chat_context = client.chats.create(model="models/gemini-2.5-flash")
-            # Gửi persona lần đầu
-            await asyncio.to_thread(lambda: chat_context.send_message({
-                "content": PHOBE_PERSONA
-            }))
+            temp = 0.9 if flirt_enable else 0.6
+            chat_context = client.chats.create(
+                model="models/gemini-2.5-flash",
+                temperature=temp
+            )
+            # Gửi persona lần đầu bằng types.Part
+            await asyncio.to_thread(lambda: chat_context.send_message(
+                types.Part(content=PHOBE_PERSONA)
+            ))
 
-        # Gửi câu hỏi từ user
-        user_question = cauhoi.strip()
-        response = await asyncio.to_thread(lambda: chat_context.send_message({
-            "content": user_question,
-            "temperature": 0.9 if flirt_enable else 0.6
-        }))
+        # Gửi câu hỏi user bằng types.Part
+        response = await asyncio.to_thread(lambda: chat_context.send_message(
+            types.Part(content=cauhoi)
+        ))
 
         answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
