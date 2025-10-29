@@ -126,8 +126,7 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
                 timeout=25
             )
         except asyncio.TimeoutError:
-            global chat_context
-            chat_context = None 
+            chat_context = None   # ✅ không cần global ở đây nữa
             await interaction.followup.send(
                 "⚠️ Gemini phản hồi quá chậm... **Phobe đã bị reset trí nhớ.** Hãy thử lại sau nhé!",
                 ephemeral=True
