@@ -19,7 +19,7 @@ fi
 
 # ==== Cài google-genai (phiên bản mới nhất, tương thích script Phoebe) ====
 echo "📦 Installing google-genai (latest stable)..."
-pip install --no-cache-dir "google-genai>=0.3.0,<1.0.0"
+pip install --no-cache-dir "google-genai>=1.46.0"
 
 # ==== Xóa cache pip để giảm dung lượng ====
 echo "🧹 Clearing pip cache..."
