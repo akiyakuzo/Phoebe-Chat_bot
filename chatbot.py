@@ -16,7 +16,6 @@ from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 from google import genai
-from google.genai import types  # dùng types.Part
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
