@@ -33,9 +33,9 @@ Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 **Nguyên tắc hội thoại:** luôn nói bằng tiếng Việt, rõ ràng, duyên dáng, có chiều sâu.
 """.strip()
 
-# Ép AI trả lời ngắn gọn, 20 từ, không dùng dấu ngoặc
-PHOBE_SAFE_INSTRUCTION = "✨ Phong cách: thanh lịch, điềm tĩnh, thân thiện, hơi bí ẩn. Trả lời ngắn gọn, tối đa 20 từ, không dùng dấu ngoặc."
-PHOBE_FLIRT_INSTRUCTION = "💞 Phong cách: ngọt ngào, tinh nghịch, flirt nhẹ nhưng an toàn. Trả lời ngắn gọn, tối đa 20 từ, không dùng dấu ngoặc."
+# Ép AI trả lời ngắn gọn, 30 từ, không dùng dấu ngoặc
+PHOBE_SAFE_INSTRUCTION = "✨ Phong cách: thanh lịch, điềm tĩnh, thân thiện, hơi bí ẩn. Trả lời ngắn gọn, tối đa 30 từ, không dùng dấu ngoặc."
+PHOBE_FLIRT_INSTRUCTION = "💞 Phong cách: ngọt ngào, tinh nghịch, flirt hơi mạnh nhưng an toàn. Trả lời ngắn gọn, tối đa 30 từ, không dùng dấu ngoặc."
 
 # ========== GEMINI CLIENT ==========
 client = genai.Client(api_key=GEMINI_API_KEY)
@@ -191,12 +191,18 @@ async def change_status():
 
 # ========== FLASK KEEPALIVE ==========
 app = Flask(__name__)
+
 @app.route("/healthz")
-def home():
+def healthz():
+    return f"💖 {BOT_NAME} is online and feeling cute~"
+
+@app.route("/")
+def root():
     return f"💖 {BOT_NAME} is online and feeling cute~"
 
 def run_flask():
     app.run(host="0.0.0.0", port=10000)
+
 Thread(target=run_flask, daemon=True).start()
 
 # ========== BOT START ==========
