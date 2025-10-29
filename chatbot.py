@@ -1,17 +1,13 @@
 # ==== Patch cho Python 3.13 ====
-import sys, types
+import sys, types, os, json, random, asyncio
 sys.modules['audioop'] = types.ModuleType('audioop')
 
 """
-💖 Phoebe Xinh Đẹp v6.6 Per-User Stateful (Gemini Adaptive Edition)
+💖 Phoebe Xinh Đẹp v6.7 Persistent + Token Limit
 Flask + Discord.py + Google Gemini API
-Hỗ trợ: Flirt mode, reset context per-user, /hoi mọi người dùng được
 """
 
-import os
-import random
 import discord
-import asyncio
 from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
@@ -21,12 +17,13 @@ from google import genai
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
 TOKEN = os.getenv("TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
+SESSIONS_FILE = "sessions.json"
+HISTORY_LIMIT = 10
+MAX_OUTPUT_TOKENS = 250  # Giới hạn số token trả về
 
-if not TOKEN:
-    raise RuntimeError("⚠️ Thiếu biến môi trường TOKEN.")
-if not GEMINI_API_KEY:
-    raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY.")
+if not TOKEN or not GEMINI_API_KEY:
+    raise RuntimeError("⚠️ Thiếu TOKEN hoặc GEMINI_API_KEY!")
 
 # ========== PROMPTS ==========
 PHOBE_BASE_PROMPT = """
@@ -50,36 +47,84 @@ tree = bot.tree
 
 # ========== TRẠNG THÁI ==========
 flirt_enable = False
-user_contexts = {}  # ✅ Per-user chat session
+user_contexts = {}  # user_id -> {"system_prompt": str, "history": [...]}
 
-# ========== HELPER ==========
+# ========== HELPER: LOAD/SAVE JSON ==========
+def load_sessions():
+    global user_contexts
+    if os.path.exists(SESSIONS_FILE):
+        try:
+            with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                user_contexts = {k: v for k, v in data.items() if 'history' in v and 'system_prompt' in v}
+                print(f"✅ Loaded {len(user_contexts)} user sessions from {SESSIONS_FILE}")
+        except Exception as e:
+            print(f"⚠️ Không thể load {SESSIONS_FILE}: {e}")
+
+def save_sessions():
+    try:
+        with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(user_contexts, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"⚠️ Không thể lưu {SESSIONS_FILE}: {e}")
+
+# ========== HELPER: ASK GEMINI ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
-    instruction = PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
-    final_prompt = PHOBE_BASE_PROMPT + "\n\n" + instruction
+    global user_contexts
 
-    chat_context = user_contexts.get(user_id)
-    if chat_context is None:
-        chat_context = client.chats.create(
-            model="models/gemini-2.0-flash",
-            config={"system_instruction": {"parts": [{"text": final_prompt}]}}
-        )
-        user_contexts[user_id] = chat_context
+    instruction = PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
+    full_system_prompt = PHOBE_BASE_PROMPT + "\n\n" + instruction
+
+    session = user_contexts.get(user_id)
+    if session is None:
+        session = {"system_prompt": full_system_prompt, "history": []}
+        user_contexts[user_id] = session
+
+    # Auto-prune
+    if len(session["history"]) >= HISTORY_LIMIT:
+        session["history"] = session["history"][-HISTORY_LIMIT:]
+
+    # Thêm câu hỏi user
+    session["history"].append({"role": "user", "content": user_input})
+
+    # Xây dựng prompt cuối cùng
+    memory_text = "\n".join([f"{msg['role'].title()}: {msg['content']}" for msg in session["history"]])
+    full_prompt_to_send = (
+        f"{session['system_prompt']}\n\n"
+        f"--- Lịch sử hội thoại (Chỉ {len(session['history'])} tin nhắn gần nhất) ---\n"
+        f"{memory_text}\n"
+        f"--- Kết thúc lịch sử ---\n\n"
+        f"Phoebe, hãy trả lời tin nhắn cuối cùng (User: {user_input}) dựa trên lịch sử trên:"
+    )
 
     try:
         response = await asyncio.wait_for(
-            asyncio.to_thread(lambda: chat_context.send_message(user_input)),
+            asyncio.to_thread(lambda: client.models.generate_content(
+                model="models/gemini-2.0-flash",
+                contents=[full_prompt_to_send],
+                max_output_tokens=MAX_OUTPUT_TOKENS
+            )),
             timeout=25
         )
-        return getattr(response, "text", str(response))
-    except asyncio.TimeoutError:
-        # Xóa session user khi timeout
-        if user_id in user_contexts:
-            del user_contexts[user_id]
-        return "⚠️ Gemini phản hồi quá chậm, session đã reset, hãy thử lại sau nhé!"
-    except Exception as e:
-        if user_id in user_contexts:
-            del user_contexts[user_id]
-        return f"⚠️ Lỗi Gemini: {e}"
+        answer = getattr(response, "text", str(response))
+        if not answer.strip():
+            answer = "Hmm... Phoebe hơi bối rối, bạn hỏi lại nhé? 🥺"
+
+        session["history"].append({"role": "phoebe", "content": answer})
+        save_sessions()
+        return answer
+
+    except (asyncio.TimeoutError, Exception) as e:
+        if session["history"] and session["history"][-1]["role"] == "user":
+            session["history"].pop()
+        user_contexts.pop(user_id, None)
+        save_sessions()
+
+        if isinstance(e, asyncio.TimeoutError):
+            return "⚠️ Gemini phản hồi quá chậm, session đã reset, thử lại sau nhé!"
+        else:
+            print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
+            return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
@@ -103,24 +148,26 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
     await interaction.followup.send(embed=embed)
 
 @tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
+@discord.app_commands.default_permissions()
 async def delete_conv(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     if user_id in user_contexts:
         del user_contexts[user_id]
+        save_sessions()
         msg = "🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖"
     else:
         msg = "Trí nhớ của em trống trơn rồi! 🥺"
     await interaction.response.send_message(msg, ephemeral=True)
 
 @tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt mode (quyến rũ nhẹ)")
-@discord.app_commands.checks.has_permissions(manage_messages=True)  # ✅ chỉ ai có Manage Messages
+@discord.app_commands.checks.has_permissions(manage_messages=True)
 async def chat18(interaction: discord.Interaction, enable: bool):
     global flirt_enable
     flirt_enable = enable
     user_id = str(interaction.user.id)
     if user_id in user_contexts:
-        del user_contexts[user_id]  # reset session
-
+        del user_contexts[user_id]
+        save_sessions()
     msg = (
         "💋 Đã bật *flirt mode*! Phobe sẽ nói chuyện ngọt ngào, quyến rũ hơn 😚"
         if enable else
@@ -143,22 +190,20 @@ status_list = ["Ngắm hoa 🌸", "Ngủ đông cùng anh 💜", "Đang nghe ti�
 async def change_status():
     if not bot.is_ready():
         return
-    status = random.choice(status_list)
-    await bot.change_presence(status=discord.Status.online, activity=discord.Game(status))
+    await bot.change_presence(status=discord.Status.online, activity=discord.Game(random.choice(status_list)))
 
 # ========== FLASK KEEPALIVE ==========
 app = Flask(__name__)
-
 @app.route("/healthz")
 def home():
     return f"💖 {BOT_NAME} is online and feeling cute~"
 
 def run_flask():
     app.run(host="0.0.0.0", port=10000)
-
 Thread(target=run_flask, daemon=True).start()
 
-# ========== KHỞI ĐỘNG ==========
+# ========== BOT START ==========
+load_sessions()
 @bot.event
 async def on_ready():
     await tree.sync()
