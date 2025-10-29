@@ -72,7 +72,6 @@ chat_context = None
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
 
 # ========== SLASH COMMANDS ==========
-
 @tree.command(
     name="deleteoldconversation",
     description="Xóa lịch sử hội thoại cũ của Phoebe 🧹"
@@ -104,28 +103,55 @@ async def chat18(interaction: discord.Interaction, enable: bool):
 @tree.command(name="hoi", description="Hỏi Phoebe Xinh Đẹp 💬")
 async def ask(interaction: discord.Interaction, cauhoi: str):
     global chat_context, flirt_enable
+
+    # 🕐 1. Gửi defer sớm để Discord biết bot đang xử lý
     await interaction.response.defer(thinking=True)
 
     try:
-        # --- Tạo context mới nếu chưa có ---
-        if chat_context is None:
-            style_prompt = PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
-            final_prompt = PHOBE_BASE_PROMPT + "\n\n" + style_prompt
+        # 🔁 2. Tạo prompt tùy theo chế độ flirt
+        instruction = (
+            PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
+        )
+        final_prompt = PHOBE_BASE_PROMPT + "\n\n" + instruction
 
+        # 📚 3. Nếu chưa có context hoặc vừa đổi chế độ, tạo lại session Gemini
+        if chat_context is None:
             chat_context = client.chats.create(
-                model="models/gemini-2.5-flash",
+                model="models/gemini-2.0-flash",   # ⚡ nhanh, ổn định hơn 2.5
                 system_instruction=final_prompt
             )
 
-        # --- Gửi câu hỏi ---
-        response = await asyncio.to_thread(lambda: chat_context.send_message(cauhoi))
-        answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
+        # 🧠 4. Gửi câu hỏi và đo thời gian phản hồi
+        import time
+        start_time = time.time()
 
-    except asyncio.TimeoutError:
-        answer = "⚠️ Gemini API phản hồi chậm, thử lại sau nhé."
+        try:
+            response = await asyncio.wait_for(
+                asyncio.to_thread(lambda: chat_context.send_message(cauhoi)),
+                timeout=25  # ⏳ giới hạn tối đa 25s
+            )
+        except asyncio.TimeoutError:
+            await interaction.followup.send(
+                "⚠️ Gemini phản hồi quá chậm... hãy thử lại sau nhé!",
+                ephemeral=True
+            )
+            return
+
+        elapsed = time.time() - start_time
+        print(f"⏱️ Gemini took {elapsed:.2f}s to respond.")
+
+        # 💬 5. Trả lời lại Discord
+        message_text = response.text if hasattr(response, "text") else str(response)
+        if not message_text.strip():
+            message_text = "Hmm... hình như Phoebe hơi bối rối, bạn hỏi lại nhé? 🥺"
+
+        await interaction.followup.send(f"**Phobe:** {message_text}")
+
     except Exception as e:
-        print("⚠️ Gemini Exception:", e)
-        answer = f"⚠️ Lỗi Gemini: `{e}`"
+        # ❗ 6. Xử lý lỗi chung (validation, network, v.v.)
+        error_msg = f"⚠️ Lỗi Gemini: `{str(e)}`"
+        print(error_msg)
+        await interaction.followup.send(error_msg, ephemeral=True)
 
     # --- Embed kết quả ---
     embed = discord.Embed(
