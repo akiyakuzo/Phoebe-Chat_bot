@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# ==== Chọn version Python từ biến môi trường hoặc mặc định 3.13 ====
+# ==== Chọn version Python từ biến môi trường hoặc mặc định ====
 PYTHON_VER=${PYTHON_VERSION:-3.13}
 echo "🔧 Using Python version: $PYTHON_VER"
 
@@ -9,19 +9,15 @@ echo "🔧 Using Python version: $PYTHON_VER"
 echo "🔄 Updating pip..."
 python3 -m pip install --upgrade pip setuptools wheel
 
-# ==== Cài các package từ requirements.txt ====
+# ==== Cài đặt dependencies từ requirements.txt ====
 if [ -f requirements.txt ]; then
-  echo "📦 Installing required packages..."
-  pip install --no-cache-dir -r requirements.txt
+  echo "📦 Installing dependencies..."
+  python3 -m pip install --no-cache-dir -r requirements.txt
 else
-  echo "⚠️ Không tìm thấy requirements.txt, bỏ qua bước này."
+  echo "⚠️ Không tìm thấy file requirements.txt — bỏ qua bước cài đặt gói."
 fi
 
-# ==== Cài google-genai (phiên bản mới nhất, tương thích script Phoebe) ====
-echo "📦 Installing google-genai (latest stable)..."
-pip install --no-cache-dir "google-genai>=1.46.0"
-
-# ==== Xóa cache pip để giảm dung lượng ====
+# ==== Xoá cache pip để giảm dung lượng ====
 echo "🧹 Clearing pip cache..."
 rm -rf ~/.cache/pip
 
@@ -37,6 +33,6 @@ done
 export PORT=${PORT:-10000}
 echo "🌐 Using PORT=$PORT"
 
-# ==== Chạy bot ====
+# ==== Khởi động bot ====
 echo "🤖 Starting Phoebe Xinh Đẹp bot..."
 exec python3 chatbot.py
