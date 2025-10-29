@@ -98,15 +98,18 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     await interaction.response.defer(thinking=True)
 
     try:
+        # Tạo chat mới nếu chưa có
         if chat_context is None:
             chat_context = client.chats.create(model="models/gemini-2.5-flash")
-            # Gửi persona lần đầu (chỉ gửi text)
-            await asyncio.to_thread(lambda: chat_context.send_message(PHOBE_PERSONA))
+            # Gửi persona lần đầu: dùng str duy nhất, xóa newline thừa
+            persona_text = PHOBE_PERSONA.strip()
+            await asyncio.to_thread(lambda: chat_context.send_message(persona_text))
 
         # Gửi câu hỏi user
+        user_question = cauhoi.strip()
         response = await asyncio.wait_for(
             asyncio.to_thread(lambda: chat_context.send_message(
-                cauhoi,
+                user_question,
                 parameters={"temperature": 0.9 if flirt_enable else 0.6}
             )),
             timeout=20
