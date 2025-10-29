@@ -95,20 +95,18 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
     await interaction.response.defer(thinking=True)
 
     try:
-        # Tạo chat mới nếu chưa có
+        # Tạo chat mới nếu chưa có hoặc muốn reset temperature
         if chat_context is None:
-            chat_context = client.chats.create(model="models/gemini-2.5-flash")
+            temp = 0.9 if flirt_enable else 0.6
+            chat_context = client.chats.create(
+                model="models/gemini-2.5-flash",
+                temperature=temp
+            )
+            # Gửi persona lần đầu
             await asyncio.to_thread(lambda: chat_context.send_message(PHOBE_PERSONA))
 
         # Gửi câu hỏi user
-        user_question = cauhoi.strip()
-        response = await asyncio.to_thread(
-            lambda: chat_context.send_message(
-                user_question,
-                parameters={"temperature": 0.9 if flirt_enable else 0.6}
-            )
-        )
-
+        response = await asyncio.to_thread(lambda: chat_context.send_message(cauhoi))
         answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
     except asyncio.TimeoutError:
