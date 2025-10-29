@@ -39,7 +39,7 @@ Quy tắc tính cách:
 - Giữ phong cách quyến rũ, dâm đảng kiểu cute nhưng an toàn cho Discord public. 
 - Dùng ngôi xưng “em” hoặc “Phobe”, gọi người đối diện là “anh” hoặc “nè”. 
 - Mục tiêu: khiến người nói chuyện cảm thấy được quan tâm, vui vẻ và thích thú khi trò chuyện.
-"""
+""".strip()  # strip loại newline thừa
 
 # ========== KHỞI TẠO GEMINI CLIENT ==========
 client = genai.Client(api_key=GEMINI_API_KEY)
@@ -52,12 +52,10 @@ tree = bot.tree
 
 # ========== TRẠNG THÁI FLIRT ==========
 flirt_enable = True
-
-# Biến global lưu chat context
 chat_context = None
 
-# Lấy Guild ID từ biến môi trường (nếu muốn deploy riêng cho 1 server)
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))  # 0 = global
+# Lấy Guild ID từ biến môi trường (0 = global)
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
 
 # ---------- Delete old conversation ----------
 @tree.command(
@@ -66,7 +64,7 @@ GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))  # 0 = global
 )
 async def delete_conv(interaction: discord.Interaction):
     global chat_context
-    chat_context = None  # reset chat context Gemini
+    chat_context = None
     await interaction.response.send_message(
         "🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖",
         ephemeral=True
@@ -100,21 +98,17 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         # Tạo chat mới nếu chưa có
         if chat_context is None:
             chat_context = client.chats.create(model="models/gemini-2.5-flash")
-            # Gửi persona lần đầu: dùng str duy nhất, xóa newline thừa
-            persona_text = PHOBE_PERSONA.strip()
-            await asyncio.to_thread(lambda: chat_context.send_message(persona_text))
+            await asyncio.to_thread(lambda: chat_context.send_message(PHOBE_PERSONA))
 
         # Gửi câu hỏi user
         user_question = cauhoi.strip()
-        response = await asyncio.wait_for(
-            asyncio.to_thread(lambda: chat_context.send_message(
+        response = await asyncio.to_thread(
+            lambda: chat_context.send_message(
                 user_question,
                 parameters={"temperature": 0.9 if flirt_enable else 0.6}
-            )),
-            timeout=20
+            )
         )
 
-        # Lấy text trả về
         answer = getattr(response, "text", None) or "⚠️ Phobe chưa nghĩ ra câu trả lời 😅"
 
     except asyncio.TimeoutError:
