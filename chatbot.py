@@ -72,9 +72,10 @@ chat_context = None
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
 
 # ========== SLASH COMMANDS ==========
+
 @tree.command(
     name="deleteoldconversation",
-    description="Xóa lịch sử hội thoại cũ của Phoebe 🧹"
+    description="🧹 Xóa lịch sử hội thoại cũ của Phoebe"
 )
 async def delete_conv(interaction: discord.Interaction):
     global chat_context
@@ -84,9 +85,10 @@ async def delete_conv(interaction: discord.Interaction):
         ephemeral=True
     )
 
+
 @tree.command(
     name="chat18plus",
-    description="Bật/Tắt chế độ flirt (quyến rũ nhẹ nhàng, vẫn an toàn)"
+    description="🔞 Bật hoặc tắt chế độ flirt (quyến rũ nhẹ nhàng, vẫn an toàn)"
 )
 async def chat18(interaction: discord.Interaction, enable: bool):
     global flirt_enable, chat_context
@@ -94,49 +96,57 @@ async def chat18(interaction: discord.Interaction, enable: bool):
     chat_context = None  # reset context để áp dụng prompt mới
 
     msg = (
-        "🔞 Đã bật *flirt mode*! Phobe sẽ nói chuyện ngọt ngào, quyến rũ hơn 😚 (hãy bắt đầu hội thoại mới~)"
+        "💋 Đã bật *flirt mode*! Phobe sẽ nói chuyện ngọt ngào, quyến rũ hơn 😚 (hãy bắt đầu hội thoại mới~)"
         if enable else
-        "✨ Phobe trở lại phong cách dịu dàng, thanh lịch 💞 (hãy bắt đầu hội thoại mới~)"
+        "🌸 Phobe trở lại phong cách dịu dàng, thanh lịch 💞 (hãy bắt đầu hội thoại mới~)"
     )
     await interaction.response.send_message(msg, ephemeral=True)
 
-@tree.command(name="hoi", description="Hỏi Phoebe Xinh Đẹp 💬")
+
+@tree.command(
+    name="hoi",
+    description="💬 Hỏi Phoebe Xinh Đẹp bất cứ điều gì!"
+)
 async def ask(interaction: discord.Interaction, cauhoi: str):
-    global chat_context, flirt_enable  # ✅ KHAI BÁO DUY NHẤT Ở ĐÂY
+    global chat_context, flirt_enable
     await interaction.response.defer(thinking=True)
 
     try:
-        # 1. Tạo prompt và context
+        # 1️⃣ Tạo prompt đầy đủ
         instruction = PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
         final_prompt = PHOBE_BASE_PROMPT + "\n\n" + instruction
 
+        # 2️⃣ Nếu chưa có session → tạo mới
         if chat_context is None:
-            # ✅ Tạo session Gemini mới khi chưa có
             chat_context = client.chats.create(
                 model="models/gemini-2.0-flash",
-                system_instruction={"parts": [{"text": final_prompt}]}
+                config={
+                    "system_instruction": {
+                        "parts": [{"text": final_prompt}]
+                    }
+                }
             )
 
-        # 2. Gửi câu hỏi (có timeout)
+        # 3️⃣ Gửi câu hỏi và chờ phản hồi (timeout 25s)
         try:
             response = await asyncio.wait_for(
                 asyncio.to_thread(lambda: chat_context.send_message(cauhoi)),
                 timeout=25
             )
         except asyncio.TimeoutError:
-            chat_context = None   # ❌ KHÔNG CẦN GLOBAL Ở ĐÂY
+            chat_context = None
             await interaction.followup.send(
                 "⚠️ Gemini phản hồi quá chậm... **Phobe đã bị reset trí nhớ.** Hãy thử lại sau nhé!",
                 ephemeral=True
             )
             return
 
-        # 3. Xử lý câu trả lời
+        # 4️⃣ Xử lý nội dung trả lời
         answer_text = response.text if hasattr(response, "text") else str(response)
         if not answer_text.strip():
             answer_text = "Hmm... hình như Phoebe hơi bối rối, bạn hỏi lại nhé? 🥺"
 
-        # 4. Gửi phản hồi duy nhất (embed)
+        # 5️⃣ Gửi phản hồi embed dễ thương
         embed = discord.Embed(
             title=f"{BOT_NAME} trả lời 💕",
             description=(
@@ -157,7 +167,7 @@ async def ask(interaction: discord.Interaction, cauhoi: str):
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        chat_context = None   # ❌ KHÔNG CẦN GLOBAL Ở ĐÂY
+        chat_context = None
         error_msg = f"⚠️ Lỗi Gemini: `{str(e)}`"
         print(error_msg)
         await interaction.followup.send(error_msg, ephemeral=True)
