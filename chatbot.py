@@ -13,7 +13,7 @@ import random
 import discord
 import asyncio
 from discord.ext import commands, tasks
-from flask import Flask
+from flask import Flask, redirect
 from threading import Thread
 from google import genai
 from state_manager import StateManager
