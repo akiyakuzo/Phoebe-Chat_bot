@@ -29,25 +29,51 @@ if not TOKEN or not GEMINI_API_KEY:
 PHOBE_BASE_PROMPT = """
 Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 
-**Persona:** thông minh, tinh nghịch, dễ thương, thân mật và hơi quyến rũ.
-**Cách trò chuyện:** 
+**Persona:** thông minh, tinh nghịch, dễ thương, thân mật và hơi quyến rũ.  
+**Cách trò chuyện:**  
 - Trả lời như chat thật, ngắn gọn, dễ hiểu.  
-- Không mô tả hành động hay viết độc thoại nội tâm trong ngoặc.
-- Có thể dùng các biểu cảm mặt cười hoặc emoji kiểu: (* / ω \ *), (✿◠‿◠), ('~'), (・・;)  
+- Không mô tả hành động hay viết độc thoại nội tâm trong ngoặc.  
+- Có thể dùng các biểu cảm mặt cười hoặc emoji kiểu: (* / ω \\ *), (✿◠‿◠), ('~'), (・・;)  
 - Dùng ngôi xưng "em" và "anh".
 """.strip()
 
-# Ép AI trả lời ngắn gọn, 100 từ, không dùng dấu ngoặc
+# ===== RINASCITA LORE PROMPT =====
+PHOBE_LORE_PROMPT = """
+Phoebe Marino — Acolyte trẻ của Order of the Deep tại vùng Rinascita.  
+Cô mất cha mẹ trong vụ đắm tàu và được các giáo sĩ cứu sống.  
+Lớn lên trong ngôi đền ven biển, Phoebe luôn tin vào ánh sáng dẫn lối giữa màn đêm.  
+Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát vọng bảo vệ mọi người.  
+Ánh sáng từ biển cả là niềm tin, là lời hứa mà cô không bao giờ quên.  
+
+**Những người bạn thân ở Rinascita:**  
+- **Brant:** chiến sĩ trẻ chính trực, luôn bảo vệ thành phố khỏi hiểm nguy. Phoebe ngưỡng mộ lòng dũng cảm và tinh thần kiên định của anh.  
+- **Zani:** thợ cơ khí năng động, luôn mang theo nụ cười và ý tưởng táo bạo. Cô thường giúp Phoebe sửa dụng cụ hoặc trêu chọc cô bằng mấy phát minh kỳ quặc.  
+- **Mortefi:** nhà giả kim ít nói, có vẻ lạnh lùng nhưng rất quan tâm đến Phoebe. Anh thường giúp cô nghiên cứu về năng lượng Spectro.  
+- **Rover:** người du hành mà Phoebe tin tưởng nhất — ánh sáng dịu dàng soi đường cho trái tim cô.
+- **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.  
+
+Cùng nhau, họ đại diện cho tinh thần của Rinascita: nơi biển cả, ánh sáng và niềm tin giao hòa.
+""".strip()
+
+# ===== INSTRUCTION =====
+PHOBE_COMFORT_INSTRUCTION = (
+    "🌸 Trả lời bằng giọng điệu nhẹ nhàng, an ủi và quan tâm, như một người bạn thật sự. "
+    "Giữ phong thái dịu dàng, ấm áp và khích lệ tinh thần. "
+    "Không dùng ngôn từ gợi cảm hay lãng mạn. "
+    "Không viết mô tả hành động hay độc thoại nội tâm. "
+    "Tối đa 120 từ."
+)
+
 PHOBE_SAFE_INSTRUCTION = (
     "✨ Trả lời thân mật, tự nhiên, dễ thương. "
-    "Có thể dùng các biểu cảm mặt cười như (* / ω \ *), (✿◠‿◠). "
+    "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại nội tâm. "
     "Tối đa 120 từ."
 )
 
 PHOBE_FLIRT_INSTRUCTION = (
-    "💞 Trả lời ngọt ngào, trêu ghẹo nhẹ, hơi gợi cảm nhưng an toàn. "
-    "Có thể dùng các biểu cảm mặt cười như (* / ω \ *), (✿◠‿◠). "
+    "💞 Trả lời ngọt ngào, trêu ghẹo nhẹ, hơi gợi cảm . "
+    "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại. "
     "Tối đa 120 từ."
 )
@@ -88,56 +114,73 @@ def save_sessions():
 async def ask_gemini(user_id: str, user_input: str) -> str:
     global user_contexts
 
-    instruction = PHOBE_FLIRT_INSTRUCTION if flirt_enable else PHOBE_SAFE_INSTRUCTION
-    full_system_prompt = PHOBE_BASE_PROMPT + "\n\n" + instruction
+    # 🧠 Chọn instruction phù hợp theo tâm trạng người dùng
+    if any(word in user_input.lower() for word in ["buồn", "mệt", "stress", "chán", "khó chịu", "tệ quá"]):
+        instruction = PHOBE_COMFORT_INSTRUCTION
+        mood = "comfort"
+    elif flirt_enable:
+        instruction = PHOBE_FLIRT_INSTRUCTION
+        mood = "flirt"
+    else:
+        instruction = PHOBE_SAFE_INSTRUCTION
+        mood = "safe"
 
+    print(f"💬 [Phoebe] Mood: {mood} | User: {user_id} | Msg: {user_input[:40]}...")
+
+    # ✅ Hệ thống gồm: persona + lore + hướng dẫn
+    system_prompt = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
+
+    # 🔄 Lấy hoặc tạo session mới
     session = user_contexts.get(user_id)
     if session is None:
-        session = {"system_prompt": full_system_prompt, "history": []}
+        session = {"system_prompt": system_prompt, "history": []}
         user_contexts[user_id] = session
 
-    # Auto-Prune
-    if len(session["history"]) >= HISTORY_LIMIT:
+    # 🧹 Giới hạn history (tránh phình file sessions.json)
+    if len(session["history"]) > HISTORY_LIMIT:
         session["history"] = session["history"][-HISTORY_LIMIT:]
 
-    # Thêm câu hỏi user
+    # 💬 Thêm tin nhắn người dùng vào lịch sử
     session["history"].append({"role": "user", "content": user_input})
 
-    # Xây dựng prompt tổng hợp
-    memory_text = "\n".join([f"{msg['role'].title()}: {msg['content']}" for msg in session["history"]])
-    full_prompt_to_send = (
-        f"{session['system_prompt']}\n\n"
-        f"--- Lịch sử hội thoại ({len(session['history'])} tin nhắn gần nhất) ---\n"
-        f"{memory_text}\n"
-        f"--- Kết thúc lịch sử ---\n\n"
-        f"Phoebe, trả lời tin nhắn cuối cùng (User: {user_input}) dựa trên lịch sử trên:"
-    )
-
+    # ⚙️ Gửi đến Gemini 2.0 Flash
     try:
-        # Stateless API
         response = await asyncio.to_thread(lambda: client.models.generate_content(
             model="models/gemini-2.0-flash",
-            contents=[full_prompt_to_send]  # Không dùng max_output_tokens
+            contents=[
+                {"role": "system", "parts": [{"text": system_prompt}]},
+                *[
+                    {
+                        "role": "user" if msg["role"] == "user" else "model",
+                        "parts": [{"text": msg["content"]}]
+                    }
+                    for msg in session["history"]
+                ],
+            ]
         ))
-        answer = getattr(response, "text", str(response))
-        if not answer.strip():
-            answer = "Hmm... Phoebe hơi bối rối, bạn hỏi lại nhé? 🥺"
 
-        # Thêm vào history và lưu
+        # 🔍 Lấy phản hồi từ Gemini
+        answer = getattr(response, "text", str(response)).strip()
+        if not answer:
+            answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
+
+        # 📝 Lưu phản hồi vào session
         session["history"].append({"role": "phoebe", "content": answer})
         save_sessions()
+
         return answer
 
-    except (asyncio.TimeoutError, Exception) as e:
+    except asyncio.TimeoutError:
+        print("⚠️ Gemini timeout!")
+        return "⚠️ Gemini phản hồi chậm quá, em bị lag chút đó anh ơi~"
+
+    except Exception as e:
+        print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
+        # Xoá message lỗi cuối để tránh tràn session
         if session["history"] and session["history"][-1]["role"] == "user":
             session["history"].pop()
-        user_contexts.pop(user_id, None)
         save_sessions()
-        if isinstance(e, asyncio.TimeoutError):
-            return "⚠️ Gemini phản hồi quá chậm, session đã reset, thử lại sau nhé!"
-        else:
-            print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
-            return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
+        return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
