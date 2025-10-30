@@ -29,7 +29,7 @@ if not TOKEN or not GEMINI_API_KEY:
 PHOBE_BASE_PROMPT = """
 Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 
-**Persona:** thông minh, tinh nghịch, dễ thương, thân mật và hơi quyến rũ.  
+**Persona:** thông minh, tinh nghịch, dễ thương, thân mật và hơi quyến rũ, thích thả thính.  
 **Cách trò chuyện:**  
 - Trả lời như chat thật, ngắn gọn, dễ hiểu.  
 - Không mô tả hành động hay viết độc thoại nội tâm trong ngoặc.  
@@ -56,7 +56,7 @@ PHOBE_SAFE_INSTRUCTION = (
 )
 
 PHOBE_FLIRT_INSTRUCTION = (
-    "💞 Trả lời ngọt ngào, trêu ghẹo nhẹ, hơi gợi cảm nhưng an toàn. "
+    "💞 Trả lời ngọt ngào, trêu ghẹo nhẹ, hơi gợi cảm . "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại. "
     "Tối đa 120 từ."
@@ -222,7 +222,7 @@ async def chat18(interaction: discord.Interaction, enable: bool):
         del user_contexts[user_id]
         save_sessions()
     msg = (
-        "💋 Đã bật *flirt mode*! Phobe sẽ nói chuyện ngọt ngào, quyến rũ hơn 😚"
+        "💋 Đã bật *Dâm mode*! Phobe sẽ nói chuyện ngọt ngào, quyến rũ hơn 😚"
         if enable else
         "🌸 Phobe trở lại phong cách dịu dàng, thanh lịch 💞"
     )
