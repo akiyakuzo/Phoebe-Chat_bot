@@ -104,11 +104,12 @@ def save_sessions():
         print(f"⚠️ Lỗi khi lưu session: {e}")
 
 # ========== HELPER: ASK GEMINI ==========
-async def ask_gemini(user_id: str, user_input: str) -> str:
+async def ask_gemini(user_id: str, user_input: str, client) -> str:
     global user_contexts, flirt_enable
 
-    # 1️⃣ Xác định style instruction theo mood
-    if any(word in user_input.lower() for word in ["buồn", "mệt", "stress", "chán", "khó chịu", "tệ quá"]):
+    # 1️⃣ Xác định mood
+    lower_input = user_input.lower()
+    if any(w in lower_input for w in ["buồn", "mệt", "stress", "chán", "khó chịu", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
         mood = "comfort"
     elif flirt_enable:
@@ -120,10 +121,10 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
 
     print(f"💬 [Phoebe] Mood: {mood} | User: {user_id} | Msg: {user_input[:40]}...")
 
-    # 2️⃣ Lấy hoặc tạo session history
+    # 2️⃣ Lấy hoặc tạo session
     session = user_contexts.get(user_id)
     if session is None:
-        session = {"history": []}  # Không lưu system_prompt trong session
+        session = {"history": []}
         user_contexts[user_id] = session
 
     # 3️⃣ Giới hạn history
@@ -135,17 +136,14 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
 
     # 5️⃣ Chuẩn bị messages cho API
     messages_for_api = [
-        {
-            "role": "user" if msg["role"] == "user" else "model",
-            "parts": [{"text": msg["content"]}]
-        }
+        {"role": "user" if msg["role"] == "user" else "model", "parts": [{"text": msg["content"]}]}
         for msg in session["history"]
     ]
 
-    # 6️⃣ Tạo system_instruction cuối cùng
+    # 6️⃣ Tạo system_instruction
     system_instruction_final = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
 
-    # 7️⃣ Gọi Gemini API với Retry logic
+    # 7️⃣ Gọi API với Retry logic
     for attempt in range(3):
         try:
             response = await client.generate_content_async(
@@ -158,38 +156,32 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
                 candidate_count=1
             )
 
-            # Lấy phản hồi
             answer = getattr(response, "text", str(response)).strip()
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-            # Lưu phản hồi vào history
             session["history"].append({"role": "model", "content": answer})
             save_sessions()
             return answer
 
-        except ResourceExhaustedError as e:
-            if attempt < 2:
+        except Exception as e:
+            err_str = str(e)
+            if "RESOURCE_EXHAUSTED" in err_str:
                 wait_time = 2 ** attempt
-                print(f"⚠️ Lỗi 429 RESOURCE_EXHAUSTED. Thử lại sau {wait_time}s...")
+                print(f"⚠️ Gemini quá tải, thử lại sau {wait_time}s...")
                 await asyncio.sleep(wait_time)
             else:
-                print(f"⚠️ Thử lại 3 lần thất bại: {e}")
+                print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
                 if session["history"] and session["history"][-1]["role"] == "user":
                     session["history"].pop()
                 save_sessions()
-                return "⚠️ Hiện tại Gemini quá tải, anh thử lại sau nhé!"
+                return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
 
-        except asyncio.TimeoutError:
-            print("⚠️ Gemini timeout!")
-            return "⚠️ Gemini phản hồi chậm quá, em bị lag chút đó anh ơi~"
-
-        except Exception as e:
-            print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
-            if session["history"] and session["history"][-1]["role"] == "user":
-                session["history"].pop()
-            save_sessions()
-            return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
+    # Nếu quá retry
+    if session["history"] and session["history"][-1]["role"] == "user":
+        session["history"].pop()
+    save_sessions()
+    return "⚠️ Hiện tại Gemini đang quá tải, anh thử lại sau nhé!"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
