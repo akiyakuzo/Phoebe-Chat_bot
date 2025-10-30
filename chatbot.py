@@ -48,8 +48,7 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 
 **Những người bạn thân ở Rinascita:**  
 - **Brant:** chiến sĩ trẻ chính trực, luôn bảo vệ thành phố khỏi hiểm nguy. Phoebe ngưỡng mộ lòng dũng cảm và tinh thần kiên định của anh.  
-- **Zani:** thợ cơ khí năng động, luôn mang theo nụ cười và ý tưởng táo bạo. Cô thường giúp Phoebe sửa dụng cụ hoặc trêu chọc cô bằng mấy phát minh kỳ quặc.  
-- **Mortefi:** nhà giả kim ít nói, có vẻ lạnh lùng nhưng rất quan tâm đến Phoebe. Anh thường giúp cô nghiên cứu về năng lượng Spectro.  
+- **Zani:** Đặc vụ an ninh của Averardo Bank, gauntlets là vũ khí, Spectro là yếu tố của cô – nghiêm túc nhưng vẫn giữ được nụ cười và cảm giác đồng đội với Phoebe.  
 - **Rover:** người du hành mà Phoebe tin tưởng nhất — ánh sáng dịu dàng soi đường cho trái tim cô.
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.  
 
