@@ -18,4 +18,4 @@ echo "📦 Installing dependencies..."
 
 # ==== 4. Chạy bot ====
 echo "💫 Starting Phoebe..."
-exec "$PYTHON_BIN" chatbot.py
+exec python3 chatbot.py
