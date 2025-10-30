@@ -1,18 +1,29 @@
 #!/bin/bash
 set -e
 
+# ==== Trap để in thông báo khi script exit ====
+trap 'echo "❌ Bot exited with code $?."' EXIT
+
 # ==== Chọn version Python từ biến môi trường hoặc mặc định ====
 PYTHON_VER=${PYTHON_VERSION:-3.13}
 echo "🔧 Using Python version: $PYTHON_VER"
 
+# ==== Kiểm tra Python ====
+if ! command -v python$PYTHON_VER &>/dev/null; then
+  echo "❌ Python $PYTHON_VER không được cài đặt!"
+  exit 1
+fi
+
+PYTHON_BIN=python$PYTHON_VER
+
 # ==== Cập nhật pip + setuptools + wheel ====
 echo "🔄 Updating pip..."
-python3 -m pip install --upgrade pip setuptools wheel
+$PYTHON_BIN -m pip install --upgrade pip setuptools wheel
 
-# ==== Cài đặt dependencies từ requirements.txt ====
+# ==== Cài đặt dependencies từ requirements.txt nếu có ====
 if [ -f requirements.txt ]; then
   echo "📦 Installing dependencies..."
-  python3 -m pip install --no-cache-dir -r requirements.txt
+  $PYTHON_BIN -m pip install --no-cache-dir -r requirements.txt || echo "⚠️ Có lỗi khi cài dependencies."
 else
   echo "⚠️ Không tìm thấy file requirements.txt — bỏ qua bước cài đặt gói."
 fi
@@ -33,6 +44,14 @@ done
 export PORT=${PORT:-10000}
 echo "🌐 Using PORT=$PORT"
 
-# ==== Khởi động bot ====
-echo "🤖 Starting Phoebe Xinh Đẹp bot..."
-exec python3 chatbot.py
+# ==== Hàm restart bot nếu crash ====
+function start_bot {
+  while true; do
+    echo "🤖 Starting Phoebe Xinh Đẹp bot..."
+    $PYTHON_BIN -u chatbot.py
+    echo "⚠️ Bot crashed. Restarting in 5s..."
+    sleep 5
+  done
+}
+
+start_bot
