@@ -14,6 +14,7 @@ echo "🔄 Updating pip..."
 
 # ==== 2a. Kiểm tra version google-genai ====
 echo "🔍 Checking google-genai version..."
+"$PYTHON_BIN" -m pip install --upgrade google-genai==1.47.0
 "$PYTHON_BIN" -m pip show google-genai
 
 # ==== 3. Cài đặt các thư viện từ requirements.txt ====
