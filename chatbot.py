@@ -205,7 +205,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     if session["history"] and session["history"][-1]["role"] == "user":
         session["history"].pop()
     save_sessions()
-    return "⚠️ Hiện tại Gemini đang quá tải, anh thử lại sau nhé!"!"
+    return "⚠️ Hiện tại Gemini đang quá tải, anh thử lại sau nhé!"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
