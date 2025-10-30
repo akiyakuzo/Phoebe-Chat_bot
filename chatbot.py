@@ -142,40 +142,39 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     system_instruction_final = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
 
     # 7️⃣ Gọi Gemini API
-   # 7️⃣ Gọi Gemini API
-try:
-    response = await asyncio.to_thread(lambda: client.models.generate_content(
-        model="models/gemini-2.0-flash",
-        contents=contents_for_api,
-        config={  # ✅ Đã đổi từ generation_config -> config
-            "temperature": 0.8,
-            "top_p": 0.95,
-            "top_k": 40,
-            "candidate_count": 1,
-            "system_instruction": system_instruction_final
-        }
-    ))
+    try:
+        response = await asyncio.to_thread(lambda: client.models.generate_content(
+            model="models/gemini-2.0-flash",
+            contents=contents_for_api,
+            config={  # ✅ Đổi từ generation_config -> config
+                "temperature": 0.8,
+                "top_p": 0.95,
+                "top_k": 40,
+                "candidate_count": 1,
+                "system_instruction": system_instruction_final
+            }
+        ))
 
-    answer = getattr(response, "text", str(response)).strip()
-    if not answer:
-        answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
+        answer = getattr(response, "text", str(response)).strip()
+        if not answer:
+            answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-    # Lưu phản hồi vào history
-    session["history"].append({"role": "model", "content": answer})
-    save_sessions()
+        # Lưu phản hồi vào history
+        session["history"].append({"role": "model", "content": answer})
+        save_sessions()
 
-    return answer
+        return answer
 
-except asyncio.TimeoutError:
-    print("⚠️ Gemini timeout!")
-    return "⚠️ Gemini phản hồi chậm quá, em bị lag chút đó anh ơi~"
+    except asyncio.TimeoutError:
+        print("⚠️ Gemini timeout!")
+        return "⚠️ Gemini phản hồi chậm quá, em bị lag chút đó anh ơi~"
 
-except Exception as e:
-    print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
-    if session["history"] and session["history"][-1]["role"] == "user":
-        session["history"].pop()
-    save_sessions()
-    return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
+    except Exception as e:
+        print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
+        if session["history"] and session["history"][-1]["role"] == "user":
+            session["history"].pop()
+        save_sessions()
+        return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
