@@ -113,7 +113,6 @@ def save_sessions():
     except Exception as e:
         print(f"⚠️ Lỗi khi lưu session: {e}")
 
-# ========== HELPER: ASK GEMINI ==========
 # ========== HELPER: ASK GEMINI LEGACY ==========
 async def ask_gemini_legacy(user_id: str, user_input: str) -> str:
     global user_contexts, flirt_enable, client
