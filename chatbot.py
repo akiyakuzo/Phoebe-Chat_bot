@@ -138,11 +138,12 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     for attempt in range(3):
         try:
             response = await asyncio.to_thread(lambda: client.chat.create(
-                model="chat-bison-001",
+                model="gemini-2.5-flash",  # <-- đổi model mới tương thích
                 messages=messages,
                 temperature=0.8,
                 top_p=0.95,
-                top_k=40
+                top_k=40,
+                candidate_count=1
             ))
             answer = getattr(response, "last", "").strip()
             if not answer:
