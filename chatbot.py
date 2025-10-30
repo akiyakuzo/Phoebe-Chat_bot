@@ -76,6 +76,26 @@ flirt_enable = False
 user_contexts = {}  # user_id -> {"system_prompt": str, "history": [...]}
 
 # ========== HELPER: LOAD/SAVE JSON ==========
+def load_sessions():
+    global user_contexts
+    if os.path.exists(SESSIONS_FILE):
+        try:
+            with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
+                user_contexts = json.load(f)
+            print(f"💾 Đã tải {len(user_contexts)} session cũ từ {SESSIONS_FILE}")
+        except Exception as e:
+            print(f"⚠️ Không thể load sessions: {e}")
+            user_contexts = {}
+    else:
+        user_contexts = {}
+
+def save_sessions():
+    try:
+        with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(user_contexts, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"⚠️ Lỗi khi lưu session: {e}")
+
 # ========== HELPER: ASK GEMINI ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     global user_contexts
