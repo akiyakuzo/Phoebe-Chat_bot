@@ -153,21 +153,11 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     # 6️⃣ Tạo system_instruction
     system_instruction_final = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
 
-    # 7️⃣ Tự dò hàm đồng bộ có sẵn
-    if hasattr(client, "generate_content"):
-        client_func = client.generate_content
-    elif hasattr(client, "generate_text"):
-        client_func = client.generate_text
-    elif hasattr(client, "generate"):
-        client_func = client.generate
-    else:
-        raise RuntimeError("⚠️ Client hiện tại không có hàm generate nào cả!")
-
-    # 8️⃣ Retry logic 3 lần nếu RESOURCE_EXHAUSTED
+    # 7️⃣ Retry logic 3 lần nếu RESOURCE_EXHAUSTED
     for attempt in range(3):
         try:
-            # ✅ Dùng asyncio.to_thread để gọi đồng bộ mà không chặn async
-            response = await asyncio.to_thread(lambda: client_func(
+            # ✅ Dùng client.models.generate_content (cú pháp phổ biến)
+            response = await asyncio.to_thread(lambda: client.models.generate_content(
                 model="models/gemini-2.0-flash",
                 messages=messages_for_api,
                 system_instruction=system_instruction_final,
@@ -177,7 +167,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
                 candidate_count=1
             ))
 
-            # ✅ Lấy text từ response
+            # ✅ Lấy text
             answer = getattr(response, "text", str(response)).strip()
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
@@ -186,6 +176,13 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             session["history"].append({"role": "model", "content": answer})
             save_sessions()
             return answer
+
+        except AttributeError:
+            print("🚨 LỖI CÚ PHÁP API: Client thiếu thuộc tính .models.generate_content")
+            if session["history"] and session["history"][-1]["role"] == "user":
+                session["history"].pop()
+            save_sessions()
+            return "⚠️ Lỗi cấu trúc API. Vui lòng kiểm tra lại import `google.genai` và phiên bản thư viện."
 
         except Exception as e:
             err_str = str(e)
@@ -199,7 +196,6 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
                 if session["history"] and session["history"][-1]["role"] == "user":
                     session["history"].pop()
                 save_sessions()
-
                 if "RESOURCE_EXHAUSTED" in err_str:
                     return "⚠️ Hiện tại Gemini đang quá tải, anh thử lại sau nhé!"
                 else:
@@ -209,7 +205,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     if session["history"] and session["history"][-1]["role"] == "user":
         session["history"].pop()
     save_sessions()
-    return "⚠️ Hiện tại Gemini đang quá tải, anh thử lại sau nhé!"
+    return "⚠️ Hiện tại Gemini đang quá tải, anh thử lại sau nhé!"!"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
