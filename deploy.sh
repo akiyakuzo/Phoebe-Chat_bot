@@ -3,24 +3,23 @@ set -e
 
 echo "🚀 Deploying Phoebe Xinh Đẹp Bot..."
 
-# ==== 1. Hiển thị version Python ====
+# ==== 1. Xác định Python binary ====
 PYTHON_BIN=$(command -v python3)
 echo "🔧 Using Python binary: $PYTHON_BIN"
 "$PYTHON_BIN" --version
 
-# ==== 2. Cập nhật pip & setuptools ====
-echo "🔄 Updating pip..."
+# ==== 2. Cập nhật pip, setuptools, wheel ====
+echo "🔄 Upgrading pip, setuptools, wheel..."
 "$PYTHON_BIN" -m pip install --upgrade pip setuptools wheel
 
-# ==== 2a. Kiểm tra version google-genai ====
-echo "🔍 Checking google-genai version..."
-"$PYTHON_BIN" -m pip install --upgrade google-genai==1.47.0
-"$PYTHON_BIN" -m pip show google-genai
-
-# ==== 3. Cài đặt các thư viện từ requirements.txt ====
+# ==== 3. Cài đặt dependencies từ requirements.txt ====
 echo "📦 Installing dependencies..."
-"$PYTHON_BIN" -m pip install -r requirements.txt
+"$PYTHON_BIN" -m pip install --upgrade -r requirements.txt
 
-# ==== 4. Chạy bot ====
+# ==== 4. Kiểm tra version google-genai ====
+echo "🔍 Checking google-genai version..."
+"$PYTHON_BIN" -c "import google.genai; print('Google GenAI version:', google.genai.__version__)"
+
+# ==== 5. Chạy bot ====
 echo "💫 Starting Phoebe..."
-exec python3 chatbot.py
+"$PYTHON_BIN" chatbot.py
