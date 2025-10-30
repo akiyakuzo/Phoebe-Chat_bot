@@ -7,11 +7,15 @@ sys.modules['audioop'] = types.ModuleType('audioop')
 Flask + Discord.py + Google Gemini API
 """
 
+import os
+import json
+import asyncio
 import discord
 from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 from google import genai
+from google.genai.errors import ResourceExhaustedError
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
@@ -119,7 +123,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     # 2️⃣ Lấy hoặc tạo session history
     session = user_contexts.get(user_id)
     if session is None:
-        session = {"history": []}  # ❌ Không lưu system_prompt trong session nữa
+        session = {"history": []}  # Không lưu system_prompt trong session
         user_contexts[user_id] = session
 
     # 3️⃣ Giới hạn history
@@ -129,8 +133,8 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     # 4️⃣ Thêm tin nhắn user
     session["history"].append({"role": "user", "content": user_input})
 
-    # 5️⃣ Chuẩn bị contents cho API
-    contents_for_api = [
+    # 5️⃣ Chuẩn bị messages cho API
+    messages_for_api = [
         {
             "role": "user" if msg["role"] == "user" else "model",
             "parts": [{"text": msg["content"]}]
@@ -138,43 +142,54 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
         for msg in session["history"]
     ]
 
-    # 6️⃣ Gộp prompt hệ thống cuối cùng
+    # 6️⃣ Tạo system_instruction cuối cùng
     system_instruction_final = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
 
-    # 7️⃣ Gọi Gemini API
-    try:
-        response = await asyncio.to_thread(lambda: client.models.generate_content(
-            model="models/gemini-2.0-flash",
-            contents=contents_for_api,
-            config={  # ✅ Đổi từ generation_config -> config
-                "temperature": 0.8,
-                "top_p": 0.95,
-                "top_k": 40,
-                "candidate_count": 1,
-                "system_instruction": system_instruction_final
-            }
-        ))
+    # 7️⃣ Gọi Gemini API với Retry logic
+    for attempt in range(3):
+        try:
+            response = await client.generate_content_async(
+                model="models/gemini-2.0-flash",
+                messages=messages_for_api,
+                system_instruction=system_instruction_final,
+                temperature=0.8,
+                top_p=0.95,
+                top_k=40,
+                candidate_count=1
+            )
 
-        answer = getattr(response, "text", str(response)).strip()
-        if not answer:
-            answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
+            # Lấy phản hồi
+            answer = getattr(response, "text", str(response)).strip()
+            if not answer:
+                answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-        # Lưu phản hồi vào history
-        session["history"].append({"role": "model", "content": answer})
-        save_sessions()
+            # Lưu phản hồi vào history
+            session["history"].append({"role": "model", "content": answer})
+            save_sessions()
+            return answer
 
-        return answer
+        except ResourceExhaustedError as e:
+            if attempt < 2:
+                wait_time = 2 ** attempt
+                print(f"⚠️ Lỗi 429 RESOURCE_EXHAUSTED. Thử lại sau {wait_time}s...")
+                await asyncio.sleep(wait_time)
+            else:
+                print(f"⚠️ Thử lại 3 lần thất bại: {e}")
+                if session["history"] and session["history"][-1]["role"] == "user":
+                    session["history"].pop()
+                save_sessions()
+                return "⚠️ Hiện tại Gemini quá tải, anh thử lại sau nhé!"
 
-    except asyncio.TimeoutError:
-        print("⚠️ Gemini timeout!")
-        return "⚠️ Gemini phản hồi chậm quá, em bị lag chút đó anh ơi~"
+        except asyncio.TimeoutError:
+            print("⚠️ Gemini timeout!")
+            return "⚠️ Gemini phản hồi chậm quá, em bị lag chút đó anh ơi~"
 
-    except Exception as e:
-        print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
-        if session["history"] and session["history"][-1]["role"] == "user":
-            session["history"].pop()
-        save_sessions()
-        return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
+        except Exception as e:
+            print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
+            if session["history"] and session["history"][-1]["role"] == "user":
+                session["history"].pop()
+            save_sessions()
+            return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
