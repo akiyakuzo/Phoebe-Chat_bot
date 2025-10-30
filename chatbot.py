@@ -101,7 +101,9 @@ def save_sessions():
 
 # ========== HELPER: ASK GEMINI ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
-    # Chọn instruction theo mood
+    global user_contexts, flirt_enable
+
+    # 1️⃣ Xác định style instruction theo mood
     if any(word in user_input.lower() for word in ["buồn", "mệt", "stress", "chán", "khó chịu", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
         mood = "comfort"
@@ -114,23 +116,20 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
 
     print(f"💬 [Phoebe] Mood: {mood} | User: {user_id} | Msg: {user_input[:40]}...")
 
-    # Tạo system_instruction mỗi lần gọi
-    system_instruction = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
-
-    # Lấy hoặc tạo session (chỉ lưu history)
+    # 2️⃣ Lấy hoặc tạo session history
     session = user_contexts.get(user_id)
     if session is None:
-        session = {"history": []}
+        session = {"history": []}  # ❌ Không lưu system_prompt trong session nữa
         user_contexts[user_id] = session
 
-    # Giới hạn history
+    # 3️⃣ Giới hạn history
     if len(session["history"]) > HISTORY_LIMIT:
         session["history"] = session["history"][-HISTORY_LIMIT:]
 
-    # Thêm tin nhắn user
+    # 4️⃣ Thêm tin nhắn user
     session["history"].append({"role": "user", "content": user_input})
 
-    # Chuẩn bị contents
+    # 5️⃣ Chuẩn bị contents cho API
     contents_for_api = [
         {
             "role": "user" if msg["role"] == "user" else "model",
@@ -139,28 +138,32 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
         for msg in session["history"]
     ]
 
-    # Gọi Gemini
+    # 6️⃣ Gộp prompt hệ thống cuối cùng
+    system_instruction_final = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
+
+    # 7️⃣ Gọi Gemini API
     try:
         response = await asyncio.to_thread(lambda: client.models.generate_content(
             model="models/gemini-2.0-flash",
-            contents=contents_for_api,
-            system_instruction=system_instruction,
+            contents=contents_for_api,  # chỉ dùng contents, không dùng system role
             generation_config={
                 "temperature": 0.8,
                 "top_p": 0.95,
                 "top_k": 40,
                 "candidate_count": 1,
+                "system_instruction": system_instruction_final  # ✅ FIX TYPE ERROR
             }
         ))
 
-        # Lấy phản hồi
+        # 8️⃣ Lấy phản hồi
         answer = getattr(response, "text", str(response)).strip()
         if not answer:
             answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-        # Lưu phản hồi
+        # 9️⃣ Lưu phản hồi vào history
         session["history"].append({"role": "model", "content": answer})
         save_sessions()
+
         return answer
 
     except asyncio.TimeoutError:
