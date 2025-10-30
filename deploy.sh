@@ -19,7 +19,6 @@ echo "🔍 Checking google-genai version..."
 # ==== 3. Cài đặt các thư viện từ requirements.txt ====
 echo "📦 Installing dependencies..."
 "$PYTHON_BIN" -m pip install -r requirements.txt
-"$PYTHON_BIN" -m pip install --upgrade google-genai
 
 # ==== 4. Chạy bot ====
 echo "💫 Starting Phoebe..."
