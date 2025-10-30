@@ -116,7 +116,7 @@ def save_sessions():
 # ========== HELPER: ASK GEMINI ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     global user_contexts, flirt_enable, client
-    
+
     # 1️⃣ Xác định mood
     lower_input = user_input.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "stress", "chán", "khó chịu", "tệ quá"]):
@@ -153,7 +153,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     # 6️⃣ Tạo system_instruction
     system_instruction_final = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
 
-    # 7️⃣ Gọi API với Retry logic
+    # 7️⃣ Gọi API với retry 3 lần nếu RESOURCE_EXHAUSTED
     for attempt in range(3):
         try:
             response = await client.generate_content_async(
@@ -170,6 +170,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
+            # Lưu phản hồi
             session["history"].append({"role": "model", "content": answer})
             save_sessions()
             return answer
@@ -182,6 +183,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
                 await asyncio.sleep(wait_time)
             else:
                 print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
+                # rollback user message
                 if session["history"] and session["history"][-1]["role"] == "user":
                     session["history"].pop()
                 save_sessions()
