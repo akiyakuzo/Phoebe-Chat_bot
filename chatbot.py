@@ -1,20 +1,13 @@
 # ==== Patch cho Python 3.13 ====
-import sys, types, os, json, random, asyncio
+import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
 
-"""
-💖 Phoebe Xinh Đẹp v6.8 Hoàn Chỉnh (Stateless Persistent + Fix Token Error)
-Flask + Discord.py + Google Gemini API
-"""
-
-import os
-import json
-import asyncio
+import os, json, random, asyncio
 import discord
 from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
-from google import genai
+import google.genai as genai
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
@@ -100,8 +93,7 @@ def load_sessions():
             with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
                 user_contexts = json.load(f)
             print(f"💾 Đã tải {len(user_contexts)} session cũ từ {SESSIONS_FILE}")
-        except Exception as e:
-            print(f"⚠️ Không thể load sessions: {e}")
+        except:
             user_contexts = {}
     else:
         user_contexts = {}
@@ -110,14 +102,13 @@ def save_sessions():
     try:
         with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
             json.dump(user_contexts, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"⚠️ Lỗi khi lưu session: {e}")
+    except:
+        pass
 
-# ========== HELPER: ASK GEMINI LEGACY ==========
-async def ask_gemini_legacy(user_id: str, user_input: str) -> str:
-    global user_contexts, flirt_enable, client
+# ========== HELPER: ASK GEMINI (google.genai) ==========
+async def ask_gemini(user_id: str, user_input: str) -> str:
+    global user_contexts, flirt_enable
 
-    # 1️⃣ Xác định mood
     lower_input = user_input.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "stress", "chán", "khó chịu", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
@@ -126,52 +117,41 @@ async def ask_gemini_legacy(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    # 2️⃣ Lấy hoặc tạo session
     session = user_contexts.get(user_id)
-    if session is None:
+    if not session:
         session = {"history": []}
         user_contexts[user_id] = session
 
-    # 3️⃣ Giới hạn history
     if len(session["history"]) > HISTORY_LIMIT:
         session["history"] = session["history"][-HISTORY_LIMIT:]
 
-    # 4️⃣ Thêm tin nhắn user
-    session["history"].append({"role": "user", "content": user_input})
+    session["history"].append({"author": "user", "content": user_input})
 
-    # 5️⃣ Kết hợp history thành prompt
-    conversation = ""
+    # Chuẩn bị messages
+    messages = [{"author": "system", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{instruction}"}]
     for msg in session["history"]:
-        role = "Anh" if msg["role"] == "user" else "Phoebe"
-        conversation += f"{role}: {msg['content']}\n"
+        messages.append({
+            "author": "user" if msg["author"] == "user" else "assistant",
+            "content": msg["content"]
+        })
 
-    full_prompt = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}\n\n{conversation}"
-
-    # 6️⃣ Retry logic
     for attempt in range(3):
         try:
-            # Dạng cũ: input=full_prompt
-            response = await asyncio.to_thread(lambda: client.models.generate_content(
-                model="models/gemini-2.0-flash",
-                input=full_prompt,
+            response = await asyncio.to_thread(lambda: client.chat.create(
+                model="chat-bison-001",
+                messages=messages,
                 temperature=0.8,
                 top_p=0.95,
-                top_k=40,
-                candidate_count=1
+                top_k=40
             ))
-
-            answer = getattr(response, "text", str(response)).strip()
+            answer = getattr(response, "last", "").strip()
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
-            
-            # Lưu phản hồi
-            session["history"].append({"role": "model", "content": answer})
+            session["history"].append({"author": "assistant", "content": answer})
             save_sessions()
             return answer
-
         except Exception as e:
-            print(f"⚠️ Lỗi Gemini legacy: {type(e).__name__} - {e}")
-            if session["history"] and session["history"][-1]["role"] == "user":
+            if session["history"] and session["history"][-1]["author"] == "user":
                 session["history"].pop()
             save_sessions()
             await asyncio.sleep(2)
@@ -185,16 +165,12 @@ async def ask_gemini_legacy(user_id: str, user_input: str) -> str:
 async def hoi(interaction: discord.Interaction, cauhoi: str):
     user_id = str(interaction.user.id)
     await interaction.response.defer(thinking=True)
-
-    # Gọi hàm ask_gemini_legacy
-    answer = await ask_gemini_legacy(user_id, cauhoi)
-
+    answer = await ask_gemini(user_id, cauhoi)
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {answer}",
         color=0xFFC0CB
     )
-
     embed.set_thumbnail(url=random.choice([
         "https://files.catbox.moe/2474tj.png",
         "https://files.catbox.moe/66v9vw.jpg",
@@ -210,9 +186,9 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
         "https://files.catbox.moe/gg8pt0.jpg",
         "https://files.catbox.moe/jkboop.png"
     ]))
-
     await interaction.followup.send(embed=embed)
 
+# /deleteoldconversation
 @tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
 async def delete_conv(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -224,6 +200,7 @@ async def delete_conv(interaction: discord.Interaction):
         msg = "Trí nhớ của em trống trơn rồi! 🥺"
     await interaction.response.send_message(msg, ephemeral=True)
 
+# /chat18plus
 @tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt mode (quyến rũ nhẹ)")
 @discord.app_commands.checks.has_permissions(manage_messages=True)
 async def chat18(interaction: discord.Interaction, enable: bool):
@@ -263,23 +240,19 @@ async def change_status():
 
 # ========== FLASK KEEPALIVE ==========
 app = Flask(__name__)
-
 @app.route("/healthz")
 def healthz():
     return f"💖 {BOT_NAME} is online and feeling cute~"
-
 @app.route("/")
 def root():
     return f"💖 {BOT_NAME} is online and feeling cute~"
 
 def run_flask():
     app.run(host="0.0.0.0", port=10000)
-
 Thread(target=run_flask, daemon=True).start()
 
 # ========== BOT START ==========
 load_sessions()
-
 @bot.event
 async def on_ready():
     await tree.sync()
