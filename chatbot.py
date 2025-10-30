@@ -8,6 +8,7 @@ from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 import google.genai as genai
+from google.genai.errors import APIError
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
@@ -137,8 +138,9 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
 
     for attempt in range(3):
         try:
+            print(f"💬 [Phoebe] Thử lần {attempt+1} với model gemini-2.5-flash...")
             response = await asyncio.to_thread(lambda: client.chat.create(
-                model="gemini-2.5-flash",  # <-- đổi model mới tương thích
+                model="gemini-2.5-flash",
                 messages=messages,
                 temperature=0.8,
                 top_p=0.95,
@@ -151,7 +153,27 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             session["history"].append({"author": "assistant", "content": answer})
             save_sessions()
             return answer
+        
+        # 🚨 BẮT LỖI API CỤ THỂ TRƯỚC
+        except APIError as api_err:
+            print(f"🚨 LỖI GEMINI API CỤ THỂ: Code {api_err.code} - {api_err.message}")
+            if session["history"] and session["history"][-1]["author"] == "user":
+                session["history"].pop()
+            save_sessions()
+            
+            # Kiểm tra lỗi Key/Permission
+            if api_err.code == 7 or api_err.code == 9: # 7: Permission Denied, 9: Resource Exhausted
+                return "❌ LỖI KẾT NỐI/KEY: Key API có thể sai, hết hạn hoặc bị chặn."
+            
+            # Thử lại nếu là lỗi server
+            if attempt < 2:
+                await asyncio.sleep(2)
+            else:
+                return f"⚠️ LỖI MẠNG/SERVER: {api_err.message[:60]}..."
+
         except Exception as e:
+            # Xử lý lỗi chung
+            print(f"⚠️ Lỗi Gemini chung: {type(e).__name__} - {e}")
             if session["history"] and session["history"][-1]["author"] == "user":
                 session["history"].pop()
             save_sessions()
@@ -160,7 +182,6 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
                 return "⚠️ Gemini đang gặp sự cố, thử lại sau nhé!"
 
     return "⚠️ Gemini đang gặp sự cố, thử lại sau nhé!"
-
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
 async def hoi(interaction: discord.Interaction, cauhoi: str):
