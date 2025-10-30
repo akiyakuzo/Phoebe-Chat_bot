@@ -114,22 +114,18 @@ def save_sessions():
         print(f"⚠️ Lỗi khi lưu session: {e}")
 
 # ========== HELPER: ASK GEMINI ==========
-async def ask_gemini(user_id: str, user_input: str) -> str:
+# ========== HELPER: ASK GEMINI LEGACY ==========
+async def ask_gemini_legacy(user_id: str, user_input: str) -> str:
     global user_contexts, flirt_enable, client
 
     # 1️⃣ Xác định mood
     lower_input = user_input.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "stress", "chán", "khó chịu", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
-        mood = "comfort"
     elif flirt_enable:
         instruction = PHOBE_FLIRT_INSTRUCTION
-        mood = "flirt"
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
-        mood = "safe"
-
-    print(f"💬 [Phoebe] Mood: {mood} | User: {user_id} | Msg: {user_input[:40]}...")
 
     # 2️⃣ Lấy hoặc tạo session
     session = user_contexts.get(user_id)
@@ -144,22 +140,21 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     # 4️⃣ Thêm tin nhắn user
     session["history"].append({"role": "user", "content": user_input})
 
-    # 5️⃣ Chuẩn bị messages cho API
-    messages_for_api = [
-        {"role": "user" if msg["role"] == "user" else "model", "parts": [{"text": msg["content"]}]}
-        for msg in session["history"]
-    ]
+    # 5️⃣ Kết hợp history thành prompt
+    conversation = ""
+    for msg in session["history"]:
+        role = "Anh" if msg["role"] == "user" else "Phoebe"
+        conversation += f"{role}: {msg['content']}\n"
 
-    # 6️⃣ Tạo system_instruction final
-    system_instruction_final = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
+    full_prompt = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}\n\n{conversation}"
 
-    # 7️⃣ Retry logic
+    # 6️⃣ Retry logic
     for attempt in range(3):
         try:
+            # Dạng cũ: input=full_prompt
             response = await asyncio.to_thread(lambda: client.models.generate_content(
                 model="models/gemini-2.0-flash",
-                messages=messages_for_api,
-                system_instruction=system_instruction_final,
+                input=full_prompt,
                 temperature=0.8,
                 top_p=0.95,
                 top_k=40,
@@ -169,38 +164,22 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             answer = getattr(response, "text", str(response)).strip()
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
-
+            
+            # Lưu phản hồi
             session["history"].append({"role": "model", "content": answer})
             save_sessions()
             return answer
 
-        except AttributeError:
-            print("🚨 LỖI CÚ PHÁP API: Client thiếu thuộc tính .models.generate_content")
+        except Exception as e:
+            print(f"⚠️ Lỗi Gemini legacy: {type(e).__name__} - {e}")
             if session["history"] and session["history"][-1]["role"] == "user":
                 session["history"].pop()
             save_sessions()
-            return "⚠️ Lỗi cấu trúc API. Kiểm tra import google.genai và phiên bản thư viện."
+            await asyncio.sleep(2)
+            if attempt == 2:
+                return "⚠️ Gemini đang gặp sự cố, thử lại sau nhé!"
 
-        except Exception as e:
-            err_str = str(e)
-            if "RESOURCE_EXHAUSTED" in err_str and attempt < 2:
-                wait_time = 2 ** attempt
-                print(f"⚠️ Gemini quá tải, thử lại sau {wait_time}s...")
-                await asyncio.sleep(wait_time)
-            else:
-                print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
-                if session["history"] and session["history"][-1]["role"] == "user":
-                    session["history"].pop()
-                save_sessions()
-                if "RESOURCE_EXHAUSTED" in err_str:
-                    return "⚠️ Hiện tại Gemini quá tải, thử lại sau nhé!"
-                else:
-                    return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
-
-    if session["history"] and session["history"][-1]["role"] == "user":
-        session["history"].pop()
-    save_sessions()
-    return "⚠️ Hiện tại Gemini quá tải, thử lại sau nhé!"
+    return "⚠️ Gemini đang gặp sự cố, thử lại sau nhé!"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
@@ -208,8 +187,8 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
     user_id = str(interaction.user.id)
     await interaction.response.defer(thinking=True)
 
-    # Gọi hàm ask_gemini đã được tối ưu
-    answer = await ask_gemini(user_id, cauhoi)
+    # Gọi hàm ask_gemini_legacy
+    answer = await ask_gemini_legacy(user_id, cauhoi)
 
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
