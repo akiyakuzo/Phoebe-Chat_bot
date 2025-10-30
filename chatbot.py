@@ -1,6 +1,3 @@
-Được luôn! 😎💖
-Em sẽ tổng hợp toàn bộ code Phoebe Discord Bot v6.8 với những sửa gọn session, prompt hệ thống tính toán mỗi lần gọi, Flirt/Safe/Comfort mode, Slash Commands, Flask Keepalive, và Status Loop. Đây là phiên bản hoàn chỉnh, sẵn sàng chạy trên Render/Heroku:
-
 # ==== Patch cho Python 3.13 ====
 import sys, types, os, json, random, asyncio
 sys.modules['audioop'] = types.ModuleType('audioop')
@@ -241,8 +238,8 @@ async def chat18_error(interaction: discord.Interaction, error):
         )
 
 # ========== BOT STATUS ==========
-status_list = ["Ngắm hoa 🌸", "Ngủ đông cùng anh 💜", "Đang nghe tiếng lòng 💞",
-               "Dõi theo chiến trường ✨", "Chill cùng đồng đội 🌙"]
+status_list = ["Ngắm hoa 🌸", "Ngủ trên giường cùng anh 💜", "Đang nghe tiếng lòng 💞",
+               "Dõi theo anh ✨", "Chill cùng anh 🌙"]
 
 @tasks.loop(seconds=30)
 async def change_status():
