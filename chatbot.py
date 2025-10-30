@@ -150,13 +150,12 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
         for msg in session["history"]
     ]
 
-    # 6️⃣ Tạo system_instruction
+    # 6️⃣ Tạo system_instruction final
     system_instruction_final = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
 
-    # 7️⃣ Retry logic 3 lần nếu RESOURCE_EXHAUSTED
+    # 7️⃣ Retry logic
     for attempt in range(3):
         try:
-            # ✅ Dùng client.models.generate_content (cú pháp phổ biến)
             response = await asyncio.to_thread(lambda: client.models.generate_content(
                 model="models/gemini-2.0-flash",
                 messages=messages_for_api,
@@ -167,12 +166,10 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
                 candidate_count=1
             ))
 
-            # ✅ Lấy text
             answer = getattr(response, "text", str(response)).strip()
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-            # Lưu phản hồi
             session["history"].append({"role": "model", "content": answer})
             save_sessions()
             return answer
@@ -182,7 +179,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             if session["history"] and session["history"][-1]["role"] == "user":
                 session["history"].pop()
             save_sessions()
-            return "⚠️ Lỗi cấu trúc API. Vui lòng kiểm tra lại import `google.genai` và phiên bản thư viện."
+            return "⚠️ Lỗi cấu trúc API. Kiểm tra import google.genai và phiên bản thư viện."
 
         except Exception as e:
             err_str = str(e)
@@ -192,20 +189,18 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
                 await asyncio.sleep(wait_time)
             else:
                 print(f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}")
-                # rollback user message
                 if session["history"] and session["history"][-1]["role"] == "user":
                     session["history"].pop()
                 save_sessions()
                 if "RESOURCE_EXHAUSTED" in err_str:
-                    return "⚠️ Hiện tại Gemini đang quá tải, anh thử lại sau nhé!"
+                    return "⚠️ Hiện tại Gemini quá tải, thử lại sau nhé!"
                 else:
                     return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
 
-    # Nếu quá retry
     if session["history"] and session["history"][-1]["role"] == "user":
         session["history"].pop()
     save_sessions()
-    return "⚠️ Hiện tại Gemini đang quá tải, anh thử lại sau nhé!"
+    return "⚠️ Hiện tại Gemini quá tải, thử lại sau nhé!"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
