@@ -153,11 +153,21 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     # 6️⃣ Tạo system_instruction
     system_instruction_final = f"{PHOBE_BASE_PROMPT}\n\n{PHOBE_LORE_PROMPT}\n\n{instruction}"
 
-    # 7️⃣ Retry logic nếu quá tải (Dùng generate_content + asyncio.to_thread)
+    # 7️⃣ Tự dò hàm đồng bộ có sẵn
+    if hasattr(client, "generate_content"):
+        client_func = client.generate_content
+    elif hasattr(client, "generate_text"):
+        client_func = client.generate_text
+    elif hasattr(client, "generate"):
+        client_func = client.generate
+    else:
+        raise RuntimeError("⚠️ Client hiện tại không có hàm generate nào cả!")
+
+    # 8️⃣ Retry logic 3 lần nếu RESOURCE_EXHAUSTED
     for attempt in range(3):
         try:
-            # ✅ Sửa: Dùng generate_content đồng bộ và bọc bằng asyncio.to_thread
-            response = await asyncio.to_thread(lambda: client.generate_content(
+            # ✅ Dùng asyncio.to_thread để gọi đồng bộ mà không chặn async
+            response = await asyncio.to_thread(lambda: client_func(
                 model="models/gemini-2.0-flash",
                 messages=messages_for_api,
                 system_instruction=system_instruction_final,
@@ -167,12 +177,12 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
                 candidate_count=1
             ))
 
-            # ✅ Sửa: Dùng response.text
+            # ✅ Lấy text từ response
             answer = getattr(response, "text", str(response)).strip()
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-            # Lưu phản hồi vào history
+            # Lưu phản hồi
             session["history"].append({"role": "model", "content": answer})
             save_sessions()
             return answer
@@ -189,14 +199,13 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
                 if session["history"] and session["history"][-1]["role"] == "user":
                     session["history"].pop()
                 save_sessions()
-                
-                # Trả về thông báo lỗi cuối cùng
+
                 if "RESOURCE_EXHAUSTED" in err_str:
                     return "⚠️ Hiện tại Gemini đang quá tải, anh thử lại sau nhé!"
                 else:
                     return f"⚠️ Lỗi Gemini: {type(e).__name__} - {e}"
 
-    # Phần này sẽ không cần thiết vì logic retry đã bao phủ, nhưng giữ lại cho chắc chắn.
+    # Nếu quá retry
     if session["history"] and session["history"][-1]["role"] == "user":
         session["history"].pop()
     save_sessions()
