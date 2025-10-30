@@ -114,9 +114,9 @@ def save_sessions():
         print(f"⚠️ Lỗi khi lưu session: {e}")
 
 # ========== HELPER: ASK GEMINI ==========
-async def ask_gemini(user_id: str, user_input: str, client) -> str:
-    global user_contexts, flirt_enable
-
+async def ask_gemini(user_id: str, user_input: str) -> str:
+    global user_contexts, flirt_enable, client
+    
     # 1️⃣ Xác định mood
     lower_input = user_input.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "stress", "chán", "khó chịu", "tệ quá"]):
