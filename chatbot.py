@@ -272,10 +272,10 @@ async def delete_conv(interaction: discord.Interaction):
     await interaction.response.send_message(msg, ephemeral=True)
 
 @tree.command(
-    name="chat18plus",
-    description="🔞 Bật/tắt Flirt Mode (Admin-only)",
-    default_permissions=discord.Permissions(manage_guild=True)  # 🔒 Chỉ admin có thể thấy & dùng
+    name="chat18",
+    description="Trò chuyện 18+"
 )
+@app_commands.default_permissions()
 async def chat18plus(interaction: discord.Interaction, enable: bool):
     if not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message(
