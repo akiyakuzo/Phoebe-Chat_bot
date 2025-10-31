@@ -123,7 +123,7 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI (CHUẨN SDK 1.47.0 + CHỐNG VALIDATION ERROR) ==========
+# ========== ASK GEMINI (CÓ TIMEOUT & CHỐNG TREO) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -132,7 +132,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     user_input = user_input.strip()
     if not user_input:
         return "⚠️ Không nhận được câu hỏi, anh thử lại nhé!"
-    
+
     user_input_cleaned = user_input.encode("utf-8", errors="ignore").decode()
     if not user_input_cleaned:
         return "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
@@ -141,13 +141,13 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     if len(history) > HISTORY_LIMIT + 2:
         print(f"⚠️ Reset history user {user_id}")
         last_message = user_input_cleaned
-        session["history"] = history[:2]  # giữ lại prompt gốc
+        session["history"] = history[:2]
         history = session["history"]
         user_input_to_use = last_message
     else:
         user_input_to_use = user_input_cleaned
 
-    # 3️⃣ Lựa chọn phong cách trả lời
+    # 3️⃣ Chọn phong cách trả lời
     lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
@@ -156,74 +156,62 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    # Gộp instruction vào nội dung gửi
     final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
 
-    # 4️⃣ Gửi đến Gemini (retry tối đa 3 lần)
+    # 4️⃣ Gửi đến Gemini (retry tối đa 3 lần, mỗi lần có timeout)
     for attempt in range(3):
-        # Dọn dẹp input cũ nếu lần trước lỗi
         if history and history[-1]["role"] == "user":
             history.pop()
-
-        # Thêm input mới
         history.append({"role": "user", "content": final_input_content})
 
         try:
-            # ✂️ Cắt gọn lịch sử
-            trimmed_history = history[-HISTORY_LIMIT:]
-
-            # 🧱 Chuyển sang định dạng hợp lệ cho SDK 1.47.0
             structured_history = [
-                {
-                    "role": msg["role"],
-                    "parts": [{"text": msg["content"]}]
-                }
-                for msg in trimmed_history
+                {"role": msg["role"], "parts": [{"text": msg["content"]}]}
+                for msg in history[-HISTORY_LIMIT:]
             ]
 
-            # 🚀 Gọi Gemini API
-            response = await asyncio.to_thread(lambda: client.models.generate_content(
-                model=MODEL_NAME,
-                contents=structured_history,
-                temperature=0.8
-            ))
+            # 🕐 Giới hạn thời gian phản hồi (20s)
+            response = await asyncio.wait_for(
+                asyncio.to_thread(lambda: client.models.generate_content(
+                    model=MODEL_NAME,
+                    contents=structured_history,
+                    temperature=0.8
+                )),
+                timeout=20
+            )
 
             answer = getattr(response, "text", "").strip()
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-            # ✅ Lưu phản hồi vào lịch sử
             history.append({"role": "model", "content": answer})
             session["message_count"] += 1
             save_sessions()
             return answer
 
-        except ValidationError as e:
-            print(f"❌ ValidationError: {e}")
-            if history and history[-1]["role"] == "user":
-                history.pop()
+        except asyncio.TimeoutError:
+            print(f"⏰ Timeout khi chờ Gemini trả lời (attempt {attempt+1})")
             if attempt < 2:
                 await asyncio.sleep(2)
                 continue
-            return "⚠️ Gemini bảo nội dung này không hợp lệ... anh thử gõ lại dịu dàng hơn nha~"
+            return "⚠️ Gemini phản hồi chậm quá, anh thử lại sau nha~"
 
         except APIError as e:
-            print(f"❌ APIError: {e}")
+            print(f"❌ APIError ({attempt+1}/3): {e}")
             if attempt < 2:
                 await asyncio.sleep(2)
                 continue
-            return f"⚠️ Gemini gặp sự cố: {e.message[:60]}..."
+            return f"⚠️ Gemini bị lỗi: {e.message[:60]}..."
 
         except Exception as e:
-            print(f"❌ Lỗi khác: {type(e).__name__} - {e}")
+            print(f"❌ Lỗi không xác định ({type(e).__name__}): {e}")
             if history and history[-1]["role"] == "user":
                 history.pop()
             if attempt < 2:
                 await asyncio.sleep(2)
                 continue
-            return f"⚠️ Gemini đang lỗi: {type(e).__name__}"
+            return "⚠️ Có lỗi bất ngờ khi nói chuyện với Gemini, anh thử lại sau nha~"
 
-    # 5️⃣ Nếu tất cả thất bại
     return "⚠️ Gemini không phản hồi, thử lại sau nhé!"
 
 # ========== STATUS ==========
