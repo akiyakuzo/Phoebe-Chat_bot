@@ -267,7 +267,15 @@ from discord import app_commands  # ⚠️ đảm bảo đã import dòng này �
 )
 @app_commands.default_permissions(manage_guild=True)
 async def chat18plus(interaction: discord.Interaction, enable: bool):
-    # ✅ Kiểm tra quyền thủ công để an toàn hơn
+    # ✅ Chỉ dùng được trong server
+    if not interaction.guild or not isinstance(interaction.user, discord.Member):
+        await interaction.response.send_message(
+            "❌ Lệnh này chỉ dùng được trong **server**, không phải tin nhắn riêng nha~ 💌",
+            ephemeral=True
+        )
+        return
+
+    # ✅ Kiểm tra quyền
     if not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message(
             "❌ Anh không có quyền **Quản lý máy chủ** để bật/tắt Flirt Mode đâu nè~ 🥺",
@@ -275,19 +283,30 @@ async def chat18plus(interaction: discord.Interaction, enable: bool):
         )
         return
 
+    # ✅ Bật / tắt chế độ flirt
     global flirt_enable
     flirt_enable = enable
-    status = "BẬT" if enable else "TẮT"
+    status = "BẬT 💞" if enable else "TẮT 🌸"
 
-    # 🩷 Cập nhật trạng thái hiển thị
+    # ✅ Cập nhật trạng thái bot
     new_activity = discord.Game(f"💞 Flirt Mode {status}")
     await interaction.client.change_presence(activity=new_activity)
 
-    await interaction.response.send_message(
-        f"🔞 Flirt Mode **{status}** cho **toàn bộ bot**.\n"
-        f"Phoebe sẽ trở nên {'ngọt ngào hơn~ 💖' if enable else 'hiền lành trở lại~ 🌸'}",
-        ephemeral=True  # 👈 chỉ hiện với người chạy lệnh
+    # 💗 Tạo embed hiển thị
+    embed = discord.Embed(
+        title="💋 Flirt Mode",
+        description=(
+            f"**Trạng thái:** {status}\n"
+            f"**Người thực hiện:** {interaction.user.mention}\n\n"
+            f"{'Phoebe sẽ trở nên quyến rũ và ngọt ngào hơn~ 💖' if enable else 'Phoebe sẽ ngoan hiền trở lại~ 🌷'}"
+        ),
+        color=discord.Color.pink() if enable else discord.Color.blurple()
     )
+    embed.set_thumbnail(url=interaction.client.user.display_avatar.url)
+    embed.set_footer(text="Phoebe Xinh Đẹp • Powered by Gemini 💫")
+
+    # ✅ Gửi phản hồi riêng tư
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ========== FLASK ==========
 app = Flask(__name__)
