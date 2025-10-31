@@ -3,6 +3,14 @@ set -e
 
 echo "🚀 Deploying Phoebe Xinh Đẹp Bot..."
 
+# ==== 0. Kiểm tra và đổi tên file xung đột (nếu có) ====
+for f in google.py generativeai.py genai.py; do
+    if [ -f "$f" ]; then
+        echo "⚠️ Đổi tên file xung đột $f → ${f%.py}_bak.py"
+        mv "$f" "${f%.py}_bak.py"
+    fi
+done
+
 # ==== 1. Xác định Python binary ====
 PYTHON_BIN=$(command -v python3)
 echo "🔧 Using Python binary: $PYTHON_BIN"
