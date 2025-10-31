@@ -35,7 +35,7 @@ HISTORY_LIMIT = 20
 SESSIONS_FILE = "sessions.json"
 flirt_enable = False
 active_chats = {}
-TYPING_SPEED = 0.02
+TYPING_SPEED = 0.002
 
 # ========== STYLE INSTRUCTIONS ==========
 PHOBE_SAFE_INSTRUCTION = (
