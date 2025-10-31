@@ -142,19 +142,21 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     prompt_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history[-HISTORY_LIMIT:]])
     prompt_text += f"\nuser: {user_input_to_use}\nassistant:"
 
+for attempt in range(3):
     try:
-        response = await asyncio.to_thread(lambda: genai.Chat.create(
+        response = genai.Chat.create(
             model="gemini-2.0-flash",
             messages=[{"role": "user", "content": prompt_text}],
             temperature=0.8,
             max_output_tokens=512
-        ))
+        )
         answer = response.choices[0].message.content.strip()
-        if not answer:
-            answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
+        break
     except Exception as e:
-        print(f"❌ Lỗi Gemini: {e}")
-        answer = "⚠️ Gemini 2.0 Flash không phản hồi, thử lại sau nhé!"
+        print(f"Lỗi Gemini: {e}, thử lại {attempt+1}/3")
+        await asyncio.sleep(2 ** attempt)
+else:
+    answer = "⚠️ Gemini 2.0 Flash không phản hồi, thử lại sau nhé!"
 
     history.append({"role": "user", "content": user_input_to_use})
     history.append({"role": "assistant", "content": answer})
