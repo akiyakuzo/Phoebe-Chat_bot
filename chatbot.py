@@ -4,6 +4,7 @@ sys.modules['audioop'] = types.ModuleType('audioop')
 
 import os, json, random, asyncio
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
@@ -271,12 +272,15 @@ async def delete_conv(interaction: discord.Interaction):
         msg = "Trí nhớ của em trống trơn rồi mà~ 🥺"
     await interaction.response.send_message(msg, ephemeral=True)
 
+from discord import app_commands  # ⚠️ đảm bảo đã import dòng này ở đầu file
+
 @tree.command(
-    name="chat18",
-    description="Trò chuyện 18+"
+    name="chat18plus",
+    description="🔞 Bật/tắt Flirt Mode (chỉ Admin có quyền)"
 )
-@app_commands.default_permissions()
+@app_commands.default_permissions(manage_guild=True)
 async def chat18plus(interaction: discord.Interaction, enable: bool):
+    # ✅ Kiểm tra quyền thủ công để an toàn hơn
     if not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message(
             "❌ Anh không có quyền **Quản lý máy chủ** để bật/tắt Flirt Mode đâu nè~ 🥺",
@@ -295,7 +299,7 @@ async def chat18plus(interaction: discord.Interaction, enable: bool):
     await interaction.response.send_message(
         f"🔞 Flirt Mode **{status}** cho **toàn bộ bot**.\n"
         f"Phoebe sẽ trở nên {'ngọt ngào hơn~ 💖' if enable else 'hiền lành trở lại~ 🌸'}",
-        ephemeral=True
+        ephemeral=True  # 👈 chỉ hiện với người chạy lệnh
     )
 
 # ========== FLASK ==========
