@@ -322,7 +322,7 @@ def healthz():
 
 def run_flask():
     """Chạy Flask server song song với bot Discord"""
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
 
 def keep_alive():
     """Giữ tiến trình sống bằng cách chạy Flask trên luồng nền"""
