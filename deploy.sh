@@ -18,7 +18,7 @@ echo "📦 Installing dependencies..."
 
 # ==== 4. Kiểm tra version google-generativeai ====
 echo "🔍 Checking google-generativeai version..."
-"$PYTHON_BIN" -c "import google.generativeai as genai; print('Google GenAI version:', genai.__version__)"
+"$PYTHON_BIN" -c "import google.generativeai as genai; print('Google GenerativeAI version:', genai.__version__)"
 
 # ==== 5. Chạy bot ====
 echo "💫 Starting Phoebe..."
