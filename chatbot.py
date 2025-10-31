@@ -124,7 +124,7 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI (DÙNG CHO GEMINI 2.5 FLASH) ==========
+# ========== ASK GEMINI (TƯƠNG THÍCH GOOGLE-GENAI 1.47.0) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -141,14 +141,18 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     # 2️⃣ Reset lịch sử nếu quá dài
     if len(history) > HISTORY_LIMIT + 2:
         print(f"⚠️ Reset history user {user_id}")
+        last_message = user_input_cleaned
         session["history"] = [
             {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
             {"role": "model", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
         ]
         history = session["history"]
+        user_input_to_use = last_message
+    else:
+        user_input_to_use = user_input_cleaned
 
     # 3️⃣ Chọn instruction phù hợp
-    lower_input = user_input_cleaned.lower()
+    lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
     elif flirt_enable:
@@ -156,39 +160,46 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    # 4️⃣ Thêm user input vào history
-    history.append({"role": "user", "content": user_input_cleaned})
-
-    # 5️⃣ Format nội dung đúng chuẩn Gemini 2.5 Flash
+    # 4️⃣ Format lại lịch sử cho Gemini 2.5 Flash
     contents = [
         {"role": msg["role"], "parts": [{"text": msg["content"]}]}
         for msg in history[-HISTORY_LIMIT:]
     ]
+    contents.append({"role": "user", "parts": [{"text": user_input_to_use}]})
 
-    # 6️⃣ Gọi API Gemini 2.5 Flash
+    # 5️⃣ Gọi API Gemini 2.5 Flash
     for attempt in range(3):
         try:
             response = await asyncio.wait_for(
                 asyncio.to_thread(lambda: client.models.generate_content(
-                    model=MODEL_NAME,
+                    model=MODEL_NAME,  # ví dụ: "gemini-2.5-flash"
                     contents=contents,
-                    generation_config={
-                        "temperature": 0.8,
-                        "max_output_tokens": 512
-                    },
-                    system_instruction=instruction
+                    system_instruction=instruction,
+                    temperature=0.8,
+                    top_p=0.9,
+                    max_output_tokens=512
                 )),
                 timeout=25
             )
 
-            # ✅ Lấy kết quả
-            answer = getattr(response, "text", "").strip()
+            # ✅ Lấy kết quả an toàn
+            answer = ""
+            try:
+                answer = getattr(response, "text", "").strip()
+                if not answer and hasattr(response, "candidates"):
+                    answer = response.candidates[0].content.parts[0].text.strip()
+            except Exception:
+                pass
+
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
+            # 🧠 Lưu lại lịch sử
+            history.append({"role": "user", "content": user_input_to_use})
             history.append({"role": "model", "content": answer})
             session["message_count"] += 1
             save_sessions()
+
             return answer
 
         except APIError as e:
