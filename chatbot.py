@@ -34,7 +34,7 @@ HISTORY_LIMIT = 20
 SESSIONS_FILE = "sessions.json"
 flirt_enable = False
 active_chats = {}
-TYPING_SPEED = 0.02 # Tốc độ gõ: Điều chỉnh giá trị này để tăng/giảm tốc độ
+TYPING_SPEED = 0.01 # Tốc độ gõ: Điều chỉnh giá trị này để tăng/giảm tốc độ
 
 # ========== STYLE INSTRUCTIONS (Giữ nguyên) ==========
 PHOBE_SAFE_INSTRUCTION = (
