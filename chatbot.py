@@ -2,14 +2,21 @@
 import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
 
-import os, json, random, asyncio
+# ========== IMPORTS ==========
+import os
+import json
+import random
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 from datetime import datetime
+
+# ========== GOOGLE GENAI (SDK 1.47.0) ==========
 import google.genai as genai
+from google.genai.types import Content
 from google.genai.errors import APIError
 
 # ========== CONFIG ==========
