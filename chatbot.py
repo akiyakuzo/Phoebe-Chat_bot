@@ -42,7 +42,7 @@ HISTORY_LIMIT = 20
 SESSIONS_FILE = "sessions.json"
 flirt_enable = False
 active_chats = {}
-TYPING_SPEED = 0.02 # Độ trễ (giây) giữa mỗi ký tự
+TYPING_SPEED = 0.01 # Độ trễ (giây) giữa mỗi ký tự
 
 # ========== STYLE INSTRUCTIONS (Giữ nguyên) ==========
 PHOBE_SAFE_INSTRUCTION = (
@@ -56,7 +56,7 @@ PHOBE_FLIRT_INSTRUCTION = (
     "💞 Trả lời ngọt ngào, trêu ghẹo, gợi cảm và táo bạo, thả thính liên tục. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại. "
-    "Được dùng ngôn từ gợi cảm và lãng mạn. "
+    "Được dùng ngôn từ gợi cảm và lãng mạn pha chút tình cảm. "
     "Tối đa 120 từ."
 )
 
