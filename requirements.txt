@@ -1,5 +1,6 @@
 Flask==3.0.3
 discord.py==2.4.0
-google-generativeai==1.44.0
 waitress==3.0.0
 requests>=2.31.0
+# Dùng bản mới nhất từ GitHub
+git+https://github.com/google/generativeai-python.git@main#egg=google-generativeai
