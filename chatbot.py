@@ -14,15 +14,16 @@ from flask import Flask
 from threading import Thread
 from datetime import datetime
 
-# ========== GOOGLE GENERATIVE AI (Gemini 2.0 / SDK 0.3.0) ==========
+# ========== GOOGLE GENERATIVE AI (Gemini 2.0 Flash) ==========
 import google.generativeai as genai
+# ĐÃ XÓA: from google.generativeai.errors import APIError (Để tương thích 0.3.0)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
-# ==== Lưu ý: SDK 0.3.0 dùng configure, không dùng Client ====
-genai.configure(api_key=GEMINI_API_KEY)
+# Khởi tạo Client
+client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-2.5-flash"
 
 # ========== CONFIG ==========
@@ -113,10 +114,10 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI (SDK 0.3.0) ==========
+# ========== ASK GEMINI (TỐI ƯU XỬ LÝ LỖI & generate_content) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
-    # Lấy hoặc tạo session
-    chat = get_or_create_chat(user_id)  # trả về ChatSession từ model.start_chat()
+    session = get_or_create_chat(user_id)
+    history = session["history"]
 
     user_input = user_input.strip()
     if not user_input:
@@ -126,8 +127,18 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     if not user_input_cleaned:
         return "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
 
-    # Chọn instruction
-    lower_input = user_input_cleaned.lower()
+    # 🌟 Reset History nếu quá dài
+    if len(history) > HISTORY_LIMIT + 2:
+        print(f"⚠️ Reset history user {user_id}")
+        last_message = user_input_cleaned
+        session["history"] = history[:2] 
+        history = session["history"]
+        user_input_to_use = last_message
+    else:
+        user_input_to_use = user_input_cleaned
+
+    # 🎭 Chọn instruction
+    lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
     elif flirt_enable:
@@ -135,27 +146,41 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    final_input_content = f"{user_input_cleaned}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
+    # Gộp Instruction vào Input cuối cùng 
+    final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
+    
+    # 💬 Chuẩn bị lịch sử gửi cho Gemini
+    contents_to_send = history + [{"role": "user", "content": final_input_content}]
 
     answer = ""
     for attempt in range(3):
         try:
-            # Gửi message tới chat session (SDK 0.3.0)
-            response = await asyncio.to_thread(chat.send_message, final_input_content)
+            response = await asyncio.to_thread(
+                lambda: client.models.generate_content(
+                    model=MODEL_NAME,
+                    contents=contents_to_send,
+                    temperature=0.8
+                )
+            )
             answer = response.text.strip()
             if answer:
                 break
+        # ✅ CHỈ DÙNG EXCEPT EXCEPTION ĐỂ BẮT MỌI LỖI (APIError, GoogleAPIError,...)
         except Exception as e:
             print(f"❌ Lỗi Gemini: {type(e).__name__} - {e}, thử lại {attempt+1}/3")
             await asyncio.sleep(2 ** attempt)
             if attempt == 2:
-                return f"⚠️ Gemini đang lỗi: {type(e).__name__}"
+                # Trả về loại lỗi và 60 ký tự đầu tiên của thông báo lỗi nếu có
+                err_msg = str(e)
+                return f"⚠️ Gemini đang lỗi: {type(e).__name__} - {err_msg[:60]}..."
+    else:
+        answer = "⚠️ Gemini 2.0 Flash không phản hồi, thử lại sau nhé!"
 
-    # Lưu vào history (chỉ để tracking, chat session tự quản lý context)
-    session_data = active_chats[user_id]
-    session_data['message_count'] += 1
-    save_chat_sessions()
-
+    # 💾 Lưu lịch sử (lưu input sạch)
+    history.append({"role": "user", "content": user_input_to_use})
+    history.append({"role": "model", "content": answer})
+    session["message_count"] += 1
+    save_sessions()
     return answer
 
 # ========== STATUS ==========
@@ -254,7 +279,7 @@ def healthz():
     return {"status": "ok", "message": "Phoebe khỏe mạnh nè~ 💖"}, 200
 
 def run_flask():
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
 
 def keep_alive():
     thread = Thread(target=run_flask, daemon=True)
