@@ -111,7 +111,7 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI 2.0 FLASH ==========
+# ========== ASK GEMINI 2.0 FLASH (0.8.5) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -120,7 +120,6 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     if not user_input:
         return "⚠️ Không nhận được câu hỏi, anh thử lại nhé!"
 
-    # Reset history nếu quá dài
     if len(history) > HISTORY_LIMIT + 2:
         last_message = user_input
         session["history"] = [
@@ -132,7 +131,6 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         user_input_to_use = user_input
 
-    # Chọn instruction
     lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
@@ -141,25 +139,23 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    # Kết hợp history và prompt
-    prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history[-HISTORY_LIMIT:]])
-    prompt += f"\nuser: {user_input_to_use}\nassistant:"
+    prompt_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history[-HISTORY_LIMIT:]])
+    prompt_text += f"\nuser: {user_input_to_use}\nassistant:"
 
     try:
-        response = await asyncio.to_thread(lambda: genai.generate(
+        response = await asyncio.to_thread(lambda: genai.Chat.create(
             model="gemini-2.0-flash",
-            prompt=prompt,
+            messages=[{"role": "user", "content": prompt_text}],
             temperature=0.8,
             max_output_tokens=512
         ))
-        answer = response.content[0].text.strip()
+        answer = response.choices[0].message.content.strip()
         if not answer:
             answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
     except Exception as e:
         print(f"❌ Lỗi Gemini: {e}")
         answer = "⚠️ Gemini 2.0 Flash không phản hồi, thử lại sau nhé!"
 
-    # Lưu history
     history.append({"role": "user", "content": user_input_to_use})
     history.append({"role": "assistant", "content": answer})
     session["message_count"] += 1
@@ -178,7 +174,7 @@ activity_list = [
 async def random_status():
     global flirt_enable
     if flirt_enable:
-         activity = discord.Game("💞 Flirt Mode ON")
+         activity = discord.Game("💞 Phoebe Dâm ON")
     else:
          activity = random.choice(activity_list)
     await bot.change_presence(status=random.choice(status_list), activity=activity)
