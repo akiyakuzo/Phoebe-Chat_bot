@@ -145,44 +145,43 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    # 🌟 Thêm tin nhắn user vào history trong vòng lặp attempt
-  for attempt in range(3):
-    # Thêm tin nhắn user
-    history.append({"role": "user", "content": user_input})
-    
-    try:
-        # Gọi API Gemini
-        response = await asyncio.to_thread(lambda: client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=history,
-            config={"temperature": 0.8}
-        ))
-        answer = getattr(response, "text", "").strip()
-        if not answer:
-            answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
-        
-        # Thêm phản hồi bot vào history
-        history.append({"role": "model", "content": answer})
-        session['message_count'] += 1
-        save_sessions()
-        return answer
+    for attempt in range(3):
+        # Thêm tin nhắn user
+        history.append({"role": "user", "content": user_input})
 
-    except APIError as api_err:
-        # Xử lý lỗi API chi tiết
-        if history and history[-1]['role'] == 'user': history.pop()
-        save_sessions()
-        # ... logic xử lý lỗi Key/Billing ...
+        try:
+            # Gọi API Gemini
+            response = await asyncio.to_thread(lambda: client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=history,
+                config={"temperature": 0.8}
+            ))
+            answer = getattr(response, "text", "").strip()
+            if not answer:
+                answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-    except Exception as e:
-        # 🌟 THÊM DÒNG NÀY
-        print(f"❌ LỖI GEMINI CHUNG KHÔNG PHẢI APIError: {type(e).__name__} - {e}")
+            # Thêm phản hồi bot vào history
+            history.append({"role": "model", "content": answer})
+            session['message_count'] += 1
+            save_sessions()
+            return answer
 
-        if history and history[-1]['role'] == 'user': history.pop()
-        save_sessions()
-        if attempt < 2:
-            await asyncio.sleep(2)
-        else:
-            return f"⚠️ Gemini đang gặp sự cố: Lỗi {type(e).__name__}, thử lại sau nhé!"
+        except APIError as api_err:
+            # Xử lý lỗi API chi tiết
+            if history and history[-1]['role'] == 'user': history.pop()
+            save_sessions()
+            # ... logic xử lý lỗi Key/Billing ...
+
+        except Exception as e:
+            # 🌟 Thêm dòng này để debug lỗi chung
+            print(f"❌ LỖI GEMINI CHUNG KHÔNG PHẢI APIError: {type(e).__name__} - {e}")
+
+            if history and history[-1]['role'] == 'user': history.pop()
+            save_sessions()
+            if attempt < 2:
+                await asyncio.sleep(2)
+            else:
+                return f"⚠️ Gemini đang gặp sự cố: Lỗi {type(e).__name__}, thử lại sau nhé!"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
