@@ -1,5 +1,6 @@
 # ==== PATCH PYTHON 3.11 ====
 import sys, types
+# Vá lỗi audioop trên môi trường Render/Linux, thường gặp khi dùng discord.py
 sys.modules['audioop'] = types.ModuleType('audioop')
 
 # ========== IMPORTS ==========
@@ -20,8 +21,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
+# ✅ Khởi tạo chuẩn SDK 0.3.0
 genai.configure(api_key=GEMINI_API_KEY)
-# ✅ Đã xác nhận model
+# Đã xác nhận model
 MODEL_NAME = "gemini-2.0-flash"
 
 # ========== CONFIG BOT ==========
@@ -114,7 +116,7 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI STREAM (Giữ nguyên) ==========
+# ========== ASK GEMINI STREAM (Sửa lỗi "models" không tồn tại) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -151,8 +153,9 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     full_answer = ""
 
     try:
+        # ✅ FIX: Gọi trực tiếp genai.generate_content_stream thay vì genai.models.generate_content_stream
         response_stream = await asyncio.to_thread(
-            lambda: genai.models.generate_content_stream(
+            lambda: genai.generate_content_stream(
                 model=MODEL_NAME,
                 contents=contents_to_send,
                 temperature=0.8
@@ -190,7 +193,7 @@ async def random_status():
         activity = random.choice(activity_list)
     await bot.change_presence(status=random.choice(status_list), activity=activity)
 
-# ========== SLASH COMMANDS (Cập nhật Typing Effect) ==========
+# ========== SLASH COMMANDS (Có Typing Effect) ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
 async def hoi(interaction: discord.Interaction, cauhoi: str):
     await interaction.response.defer(thinking=True)
