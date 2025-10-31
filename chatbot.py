@@ -136,6 +136,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
         ]
         session['message_count'] = 0
         user_input = last_message
+        history = session['history']  # cập nhật lại reference
 
     lower_input = user_input.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "stress", "chán", "khó chịu", "tệ quá"]):
@@ -146,7 +147,7 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
         instruction = PHOBE_SAFE_INSTRUCTION
 
     for attempt in range(3):
-        # Thêm tin nhắn user
+        # 🌟 Thêm tin nhắn user vào history **tại đầu mỗi attempt**
         history.append({"role": "user", "content": user_input})
 
         try:
@@ -167,21 +168,33 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             return answer
 
         except APIError as api_err:
-            # Xử lý lỗi API chi tiết
-            if history and history[-1]['role'] == 'user': history.pop()
+            # Xóa tin nhắn user vừa thêm nếu lỗi
+            if history and history[-1]['role'] == 'user': 
+                history.pop()
             save_sessions()
-            # ... logic xử lý lỗi Key/Billing ...
+
+            # ⚠️ Bắt lỗi Key/Billing
+            if api_err.code in [7, 9]:
+                return "❌ LỖI KẾT NỐI/KEY: Key có thể sai, hết hạn, hoặc cần Set Billing."
+            # Thử lại nếu lỗi server
+            if attempt < 2:
+                await asyncio.sleep(2)
+            else:
+                return f"⚠️ LỖI MẠNG/SERVER: {api_err.message[:60]}..."
 
         except Exception as e:
-            # 🌟 Thêm dòng này để debug lỗi chung
+            # 🌟 In lỗi chi tiết để debug
             print(f"❌ LỖI GEMINI CHUNG KHÔNG PHẢI APIError: {type(e).__name__} - {e}")
 
-            if history and history[-1]['role'] == 'user': history.pop()
+            if history and history[-1]['role'] == 'user': 
+                history.pop()
             save_sessions()
             if attempt < 2:
                 await asyncio.sleep(2)
             else:
                 return f"⚠️ Gemini đang gặp sự cố: Lỗi {type(e).__name__}, thử lại sau nhé!"
+
+    return "⚠️ Gemini đang gặp sự cố, thử lại sau nhé!"
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
