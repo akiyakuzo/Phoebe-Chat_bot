@@ -127,6 +127,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
         user_input_to_use = last_message
     else:
         user_input_to_use = user_input_cleaned
+
     lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
@@ -134,12 +135,14 @@ async def ask_gemini_stream(user_id: str, user_input: str):
         instruction = PHOBE_FLIRT_INSTRUCTION
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
+
     final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
     contents_to_send = history + [{"role": "user", "content": final_input_content}]
     full_answer = ""
+
     try:
         response_stream = await asyncio.to_thread(
-            lambda: genai.models.generate_content_stream(
+            lambda: genai.generate_content_stream(  # <--- SỬA ĐƯỜNG DẪN
                 model=MODEL_NAME,
                 contents=contents_to_send,
                 temperature=0.8
@@ -153,6 +156,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     except Exception as e:
         yield f"\n⚠️ LỖI KỸ THUẬT: {type(e).__name__}"
         return
+
     history.append({"role": "user", "content": user_input_to_use})
     history.append({"role": "model", "content": full_answer})
     session["message_count"] += 1
