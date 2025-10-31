@@ -1,4 +1,4 @@
-# ==== Patch cho Python 3.13 ====
+# ==== Patch cho Python 3.11.4 ====
 import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
 
@@ -121,6 +121,22 @@ def get_or_create_chat(user_id: str):
         }
     return active_chats[user_id]
 
+# ========== BOT STATUS ==========
+status_list = [
+    "💖 Tâm sự cùng Phoebe",
+    "🎵 Nghe nhạc Wuthering Waves",
+    "🌸 Thả thính nhẹ nhàng",
+    "✨ Giao lưu cùng anh",
+    "🍵 Thưởng trà cùng bạn bè",
+]
+
+@tasks.loop(minutes=5)
+async def change_status():
+    await bot.wait_until_ready()
+    new_status = random.choice(status_list)
+    activity = discord.Game(name=new_status)
+    await bot.change_presence(status=discord.Status.online, activity=activity)
+
 # ========== HELPER: ASK GEMINI ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     session = get_or_create_chat(user_id)
@@ -147,13 +163,11 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
         instruction = PHOBE_SAFE_INSTRUCTION
 
     for attempt in range(3):
-        # 🌟 Thêm tin nhắn user vào history **tại đầu mỗi attempt**
         history.append({"role": "user", "content": user_input})
 
         try:
-            # Gọi API Gemini
             response = await asyncio.to_thread(lambda: client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=MODEL_NAME,
                 contents=history,
                 config={"temperature": 0.8}
             ))
@@ -161,31 +175,24 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-            # Thêm phản hồi bot vào history
             history.append({"role": "model", "content": answer})
             session['message_count'] += 1
             save_sessions()
             return answer
 
         except APIError as api_err:
-            # Xóa tin nhắn user vừa thêm nếu lỗi
             if history and history[-1]['role'] == 'user': 
                 history.pop()
             save_sessions()
-
-            # ⚠️ Bắt lỗi Key/Billing
             if api_err.code in [7, 9]:
                 return "❌ LỖI KẾT NỐI/KEY: Key có thể sai, hết hạn, hoặc cần Set Billing."
-            # Thử lại nếu lỗi server
             if attempt < 2:
                 await asyncio.sleep(2)
             else:
                 return f"⚠️ LỖI MẠNG/SERVER: {api_err.message[:60]}..."
 
         except Exception as e:
-            # 🌟 In lỗi chi tiết để debug
             print(f"❌ LỖI GEMINI CHUNG KHÔNG PHẢI APIError: {type(e).__name__} - {e}")
-
             if history and history[-1]['role'] == 'user': 
                 history.pop()
             save_sessions()
@@ -207,21 +214,9 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {answer}",
         color=0xFFC0CB
     )
-    embed.set_thumbnail(url=random.choice([
-        "https://files.catbox.moe/2474tj.png",
-        "https://files.catbox.moe/66v9vw.jpg",
-        "https://files.catbox.moe/ezqs00.jpg",
-        "https://files.catbox.moe/yow35q.png",
-        "https://files.catbox.moe/pzbhdp.jpg",
-        "https://files.catbox.moe/lyklnj.jpg",
-        "https://files.catbox.moe/i5sqkr.png",
-        "https://files.catbox.moe/jt184o.jpg",
-        "https://files.catbox.moe/9nq5kw.jpg",
-        "https://files.catbox.moe/45tre3.webp",
-        "https://files.catbox.moe/2y17ot.png",
-        "https://files.catbox.moe/gg8pt0.jpg",
-        "https://files.catbox.moe/jkboop.png"
-    ]))
+    # Thêm link và hình ảnh embed
+    embed.set_thumbnail(url="https://cdn.discordapp.com/avatars/{user_id}/{user_id}.png?size=128")
+    embed.add_field(name="Link gốc", value=f"[Click xem]()", inline=False)
     await interaction.followup.send(embed=embed)
 
 @tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
@@ -235,7 +230,6 @@ async def delete_conv(interaction: discord.Interaction):
         msg = "Trí nhớ của em trống trơn rồi! 🥺"
     await interaction.response.send_message(msg, ephemeral=True)
 
-# ===== FLIRT MODE =====
 @tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt mode (quyến rũ nhẹ)")
 async def chat18plus(interaction: discord.Interaction, enable: bool):
     global flirt_enable
@@ -262,18 +256,15 @@ def run_flask():
 async def on_ready():
     print(f"✅ {BOT_NAME} đã sẵn sàng! Logged in as {bot.user}")
     load_sessions()
-    # Sync slash commands
     if GUILD_ID:
-        guild = discord.Object(GUILD_ID)
-        await tree.sync(guild=guild)
-        print(f"🔄 Commands đã được sync cho guild {GUILD_ID}")
+        await tree.sync(guild=discord.Object(GUILD_ID))
+        print(f"🔄 Commands đã sync cho guild {GUILD_ID}")
     else:
         await tree.sync()
-        print("🔄 Commands đã được sync global")
+        print("🔄 Commands đã sync global")
+    change_status.start()
 
 # ===== RUN BOT + FLASK =====
 if __name__ == "__main__":
-    # Chạy Flask ở thread riêng
     Thread(target=run_flask, daemon=True).start()
-    # Chạy Discord bot
     bot.run(TOKEN)
