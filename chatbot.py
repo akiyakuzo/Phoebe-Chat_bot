@@ -16,7 +16,6 @@ from datetime import datetime
 
 # ========== GOOGLE GENERATIVE AI (Gemini 2.0 Flash) ==========
 import google.generativeai as genai
-from google.generativeai import APIError
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
@@ -146,46 +145,32 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    # Gộp Instruction vào Input cuối cùng (là cách duy nhất để duy trì persona/style)
+    # Gộp Instruction vào Input cuối cùng
     final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
-    
-    # Tối ưu hóa 2: Loại bỏ 2 tin nhắn khởi tạo (index 0 và 1) khỏi mảng gửi đi
-    # Chỉ gửi các tin nhắn hội thoại thực tế + tin nhắn mới nhất
-    trimmed_history_to_send = history[2:] + [{"role": "user", "content": final_input_content}]
-    
-    # Nếu lịch sử rỗng (vừa reset hoặc lần đầu), ta gửi toàn bộ để model hiểu bối cảnh
-    if len(history) <= 2:
-         trimmed_history_to_send = history + [{"role": "user", "content": final_input_content}]
 
+    # Chỉ gửi các tin nhắn thực tế + tin nhắn mới nhất
+    trimmed_history_to_send = history[2:] + [{"role": "user", "content": final_input_content}]
+    if len(history) <= 2:
+        trimmed_history_to_send = history + [{"role": "user", "content": final_input_content}]
 
     answer = ""
     for attempt in range(3):
         try:
             response = await asyncio.to_thread(lambda: client.models.generate_content(
                 model=MODEL_NAME,
-                contents=trimmed_history_to_send, # Truyền LIST lịch sử đã tối ưu
+                contents=trimmed_history_to_send,
                 temperature=0.8
             ))
-
             answer = response.text.strip()
             if answer:
                 break
-        except APIError as e:
-            print(f"❌ APIError: {e}, thử lại {attempt+1}/3")
-            await asyncio.sleep(2 ** attempt)
-            if attempt == 2:
-                err_msg = str(e)
-                return f"⚠️ Gemini gặp sự cố: {err_msg[:60]}..."
         except Exception as e:
-            print(f"❌ Lỗi khác: {type(e).__name__} - {e}, thử lại {attempt+1}/3")
+            print(f"❌ Lỗi Gemini: {type(e).__name__} - {e}, thử lại {attempt+1}/3")
             await asyncio.sleep(2 ** attempt)
             if attempt == 2:
                 return f"⚠️ Gemini đang lỗi: {type(e).__name__}"
-    else:
-        answer = "⚠️ Gemini 2.0 Flash không phản hồi, thử lại sau nhé!"
 
-    # Lưu vào lịch sử (lưu cả prompt ban đầu, nhưng chỉ lưu nội dung sạch vào message)
-    # LƯU Ý: Lịch sử ở đây vẫn bao gồm 2 tin nhắn khởi tạo đầu tiên (history[:2])
+    # Lưu vào lịch sử
     history.append({"role": "user", "content": user_input_to_use})
     history.append({"role": "model", "content": answer})
     session["message_count"] += 1
