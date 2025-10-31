@@ -276,24 +276,24 @@ async def chat18plus(interaction: discord.Interaction, enable: bool):
     )
 
 # ========== FLASK ==========
-
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Phoebe Xinh Đẹp đang hoạt động! 🌸"
+    return "<h3>Phoebe Xinh Đẹp đang hoạt động! 🌸</h3>"
 
 @app.route("/healthz")
 def healthz():
     return {"status": "ok", "message": "Phoebe khỏe mạnh nè~ 💖"}, 200
 
 def run_flask():
-    app.run(host="0.0.0.0", port=8080)
+    """Chạy Flask server song song với bot Discord"""
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
 
 def keep_alive():
-    t = threading.Thread(target=run_flask)
-    t.daemon = True
-    t.start()
+    """Giữ tiến trình sống bằng cách chạy Flask trên luồng nền"""
+    thread = Thread(target=run_flask, daemon=True)
+    thread.start()
 
 # ========== BOT EVENTS ==========
 @bot.event
@@ -311,5 +311,5 @@ async def on_ready():
 
 # ========== RUN ==========
 if __name__ == "__main__":
-    Thread(target=run_flask, daemon=True).start()
-    bot.run(TOKEN)
+    keep_alive()  # 🔥 Gọi hàm này để Flask chạy nền, Render/UptimeRobot có thể ping
+    bot.run(TOKEN))
