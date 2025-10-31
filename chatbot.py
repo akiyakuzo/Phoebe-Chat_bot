@@ -141,8 +141,9 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     full_answer = ""
 
     try:
+        # ✅ DÙNG client.models.generate_content_stream để đảm bảo không lỗi AttributeError
         response_stream = await asyncio.to_thread(
-            lambda: genai.generate_content_stream(  # <--- SỬA ĐƯỜNG DẪN
+            lambda: client.models.generate_content_stream(
                 model=MODEL_NAME,
                 contents=contents_to_send,
                 temperature=0.8
