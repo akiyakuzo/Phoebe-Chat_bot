@@ -124,7 +124,7 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI (CÓ TIMEOUT & CHỐNG TREO) ==========
+# ========== ASK GEMINI (DÙNG CHO GEMINI 2.5 FLASH) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -160,32 +160,35 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    # 4️⃣ Chuẩn bị cấu hình sinh nội dung (fix cho SDK 1.47.0+)
-    gen_config = GenerationConfig(
-        temperature=0.8,
-        max_output_tokens=512,
-    )
+    # 4️⃣ Format lại lịch sử cho Gemini 2.5 Flash
+    contents = [
+        {"role": msg["role"], "parts": [{"text": msg["content"]}]}
+        for msg in history[-HISTORY_LIMIT:]
+    ]
+    contents.append({"role": "user", "parts": [{"text": user_input_to_use}]})
 
-    # 5️⃣ Gọi API Gemini
+    # 5️⃣ Gọi API Gemini 2.5 Flash
     for attempt in range(3):
-        history.append({"role": "user", "content": user_input_to_use})
-
         try:
-            trimmed_history = history[-HISTORY_LIMIT:]
-
             response = await asyncio.wait_for(
                 asyncio.to_thread(lambda: client.models.generate_content(
-                    model=MODEL_NAME,
-                    contents=trimmed_history,
-                    generation_config=gen_config
+                    model=MODEL_NAME,  # ví dụ: "gemini-2.5-flash"
+                    contents=contents,
+                    config={
+                        "temperature": 0.8,
+                        "max_output_tokens": 512,
+                        "system_instruction": instruction
+                    }
                 )),
-                timeout=20
+                timeout=25
             )
 
+            # ✅ Lấy kết quả
             answer = getattr(response, "text", "").strip()
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
+            history.append({"role": "user", "content": user_input_to_use})
             history.append({"role": "model", "content": answer})
             session["message_count"] += 1
             save_sessions()
@@ -193,25 +196,15 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
 
         except APIError as e:
             print(f"❌ APIError: {e}")
-            if history and history[-1]["role"] == "user":
-                history.pop()
-            save_sessions()
-            if attempt < 2:
-                await asyncio.sleep(2)
-            else:
-                return f"⚠️ Gemini gặp sự cố: {str(e)[:80]}..."
-
+            await asyncio.sleep(2)
+        except asyncio.TimeoutError:
+            print("⚠️ Timeout từ Gemini 2.5 Flash.")
+            await asyncio.sleep(2)
         except Exception as e:
             print(f"❌ Lỗi khác ({type(e).__name__}): {e}")
-            if history and history[-1]["role"] == "user":
-                history.pop()
-            save_sessions()
-            if attempt < 2:
-                await asyncio.sleep(2)
-            else:
-                return f"⚠️ Gemini đang lỗi: {type(e).__name__}"
+            await asyncio.sleep(2)
 
-    return "⚠️ Gemini không phản hồi, thử lại sau nhé!"
+    return "⚠️ Gemini 2.5 Flash không phản hồi, thử lại sau nhé!"
 
 # ========== STATUS ==========
 status_list = [discord.Status.online, discord.Status.idle, discord.Status.dnd]
