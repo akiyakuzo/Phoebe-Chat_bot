@@ -3,14 +3,6 @@ set -e
 
 echo "🚀 Deploying Phoebe Xinh Đẹp Bot..."
 
-# ==== 0. Kiểm tra và đổi tên file xung đột (nếu có) ====
-for f in google.py generativeai.py genai.py; do
-    if [ -f "$f" ]; then
-        echo "⚠️ Đổi tên file xung đột $f → ${f%.py}_bak.py"
-        mv "$f" "${f%.py}_bak.py"
-    fi
-done
-
 # ==== 1. Xác định Python binary ====
 PYTHON_BIN=$(command -v python3)
 echo "🔧 Using Python binary: $PYTHON_BIN"
@@ -24,7 +16,7 @@ echo "🔄 Upgrading pip, setuptools, wheel..."
 echo "🧹 Removing old Google GenAI versions..."
 "$PYTHON_BIN" -m pip uninstall -y google-genai google-generativeai || true
 
-# ==== 4. Cài SDK mới 0.8.0 ====
+# ==== 4. Cài SDK google-generativeai 0.8.0 ====
 echo "📦 Installing google-generativeai 0.8.0..."
 "$PYTHON_BIN" -m pip install google-generativeai==0.8.0 --no-cache-dir
 
