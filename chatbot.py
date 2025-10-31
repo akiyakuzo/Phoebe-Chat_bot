@@ -16,7 +16,7 @@ from datetime import datetime
 
 # ========== GOOGLE GENERATIVE AI (Gemini 2.0 Flash) ==========
 import google.generativeai as genai
-from google.generativeai.errors import APIError
+from google.generativeai import APIError
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
