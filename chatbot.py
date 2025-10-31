@@ -165,14 +165,9 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
         {"role": msg["role"], "parts": [{"text": msg["content"]}]}
         for msg in history[-HISTORY_LIMIT:]
     ]
-
-    # ✅ Thêm system prompt đúng chuẩn mới
-    contents.insert(0, {"role": "system", "parts": [{"text": instruction}]})
-
-    # ✅ Thêm câu hỏi mới nhất của user
     contents.append({"role": "user", "parts": [{"text": user_input_to_use}]})
 
-    # 5️⃣ Gọi API Gemini 2.5 Flash (đã bỏ system_instruction)
+    # 5️⃣ Gọi API Gemini 2.5 Flash
     for attempt in range(3):
         try:
             response = await asyncio.wait_for(
@@ -181,7 +176,8 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
                     contents=contents,
                     config={
                         "temperature": 0.8,
-                        "max_output_tokens": 512
+                        "max_output_tokens": 512,
+                        "system_instruction": instruction
                     }
                 )),
                 timeout=25
@@ -192,7 +188,6 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-            # ✅ Cập nhật lịch sử
             history.append({"role": "user", "content": user_input_to_use})
             history.append({"role": "model", "content": answer})
             session["message_count"] += 1
@@ -227,7 +222,7 @@ async def random_status():
          activity = discord.Game("💞 Flirt Mode ON")
     else:
          activity = random.choice(activity_list)
-         
+
     await bot.change_presence(status=random.choice(status_list), activity=activity)
 
 # ========== SLASH COMMANDS ==========
