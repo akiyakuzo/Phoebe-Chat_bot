@@ -124,7 +124,7 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI (TƯƠNG THÍCH GOOGLE-GENAI 1.47.0) ==========
+# ========== ASK GEMINI (DÙNG CHO GEMINI 2.5 FLASH) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -165,41 +165,38 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
         {"role": msg["role"], "parts": [{"text": msg["content"]}]}
         for msg in history[-HISTORY_LIMIT:]
     ]
+
+    # ✅ Thêm system prompt đúng chuẩn mới
+    contents.insert(0, {"role": "system", "parts": [{"text": instruction}]})
+
+    # ✅ Thêm câu hỏi mới nhất của user
     contents.append({"role": "user", "parts": [{"text": user_input_to_use}]})
 
-    # 5️⃣ Gọi API Gemini 2.5 Flash
+    # 5️⃣ Gọi API Gemini 2.5 Flash (đã bỏ system_instruction)
     for attempt in range(3):
         try:
             response = await asyncio.wait_for(
                 asyncio.to_thread(lambda: client.models.generate_content(
                     model=MODEL_NAME,  # ví dụ: "gemini-2.5-flash"
                     contents=contents,
-                    system_instruction=instruction,
-                    temperature=0.8,
-                    top_p=0.9,
-                    max_output_tokens=512
+                    config={
+                        "temperature": 0.8,
+                        "max_output_tokens": 512
+                    }
                 )),
                 timeout=25
             )
 
-            # ✅ Lấy kết quả an toàn
-            answer = ""
-            try:
-                answer = getattr(response, "text", "").strip()
-                if not answer and hasattr(response, "candidates"):
-                    answer = response.candidates[0].content.parts[0].text.strip()
-            except Exception:
-                pass
-
+            # ✅ Lấy kết quả
+            answer = getattr(response, "text", "").strip()
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
-            # 🧠 Lưu lại lịch sử
+            # ✅ Cập nhật lịch sử
             history.append({"role": "user", "content": user_input_to_use})
             history.append({"role": "model", "content": answer})
             session["message_count"] += 1
             save_sessions()
-
             return answer
 
         except APIError as e:
