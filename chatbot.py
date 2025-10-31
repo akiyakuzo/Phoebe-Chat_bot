@@ -18,6 +18,7 @@ from datetime import datetime
 import google.genai as genai
 from google.genai.types import Content
 from google.genai.errors import APIError
+from google.genai.types import GenerationConfig
 
 # ========== CONFIG ==========
 BOT_NAME = "Fibi Béll 💖"
@@ -141,13 +142,16 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     if len(history) > HISTORY_LIMIT + 2:
         print(f"⚠️ Reset history user {user_id}")
         last_message = user_input_cleaned
-        session["history"] = history[:2]
+        session["history"] = [
+            {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
+            {"role": "model", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
+        ]
         history = session["history"]
         user_input_to_use = last_message
     else:
         user_input_to_use = user_input_cleaned
 
-    # 3️⃣ Chọn phong cách trả lời
+    # 3️⃣ Chọn instruction phù hợp
     lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
@@ -156,26 +160,24 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
+    # 4️⃣ Chuẩn bị cấu hình sinh nội dung (fix cho SDK 1.47.0+)
+    gen_config = GenerationConfig(
+        temperature=0.8,
+        max_output_tokens=512,
+    )
 
-    # 4️⃣ Gửi đến Gemini (retry tối đa 3 lần, mỗi lần có timeout)
+    # 5️⃣ Gọi API Gemini
     for attempt in range(3):
-        if history and history[-1]["role"] == "user":
-            history.pop()
-        history.append({"role": "user", "content": final_input_content})
+        history.append({"role": "user", "content": user_input_to_use})
 
         try:
-            structured_history = [
-                {"role": msg["role"], "parts": [{"text": msg["content"]}]}
-                for msg in history[-HISTORY_LIMIT:]
-            ]
+            trimmed_history = history[-HISTORY_LIMIT:]
 
-            # 🕐 Giới hạn thời gian phản hồi (20s)
             response = await asyncio.wait_for(
                 asyncio.to_thread(lambda: client.models.generate_content(
                     model=MODEL_NAME,
-                    contents=structured_history,
-                    temperature=0.8
+                    contents=trimmed_history,
+                    generation_config=gen_config
                 )),
                 timeout=20
             )
@@ -189,28 +191,25 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             save_sessions()
             return answer
 
-        except asyncio.TimeoutError:
-            print(f"⏰ Timeout khi chờ Gemini trả lời (attempt {attempt+1})")
-            if attempt < 2:
-                await asyncio.sleep(2)
-                continue
-            return "⚠️ Gemini phản hồi chậm quá, anh thử lại sau nha~"
-
         except APIError as e:
-            print(f"❌ APIError ({attempt+1}/3): {e}")
-            if attempt < 2:
-                await asyncio.sleep(2)
-                continue
-            return f"⚠️ Gemini bị lỗi: {e.message[:60]}..."
-
-        except Exception as e:
-            print(f"❌ Lỗi không xác định ({type(e).__name__}): {e}")
+            print(f"❌ APIError: {e}")
             if history and history[-1]["role"] == "user":
                 history.pop()
+            save_sessions()
             if attempt < 2:
                 await asyncio.sleep(2)
-                continue
-            return "⚠️ Có lỗi bất ngờ khi nói chuyện với Gemini, anh thử lại sau nha~"
+            else:
+                return f"⚠️ Gemini gặp sự cố: {str(e)[:80]}..."
+
+        except Exception as e:
+            print(f"❌ Lỗi khác ({type(e).__name__}): {e}")
+            if history and history[-1]["role"] == "user":
+                history.pop()
+            save_sessions()
+            if attempt < 2:
+                await asyncio.sleep(2)
+            else:
+                return f"⚠️ Gemini đang lỗi: {type(e).__name__}"
 
     return "⚠️ Gemini không phản hồi, thử lại sau nhé!"
 
