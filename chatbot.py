@@ -115,8 +115,8 @@ def get_or_create_chat(user_id):
 
 # ========== ASK GEMINI (SDK 0.3.0) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
-    session = get_or_create_chat(user_id)
-    history = session["history"]
+    # Lấy hoặc tạo session
+    chat = get_or_create_chat(user_id)  # trả về ChatSession từ model.start_chat()
 
     user_input = user_input.strip()
     if not user_input:
@@ -126,17 +126,8 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     if not user_input_cleaned:
         return "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
 
-    # Reset history nếu quá dài
-    if len(history) > HISTORY_LIMIT + 2:
-        last_message = user_input_cleaned
-        session["history"] = history[:2]
-        history = session["history"]
-        user_input_to_use = last_message
-    else:
-        user_input_to_use = user_input_cleaned
-
     # Chọn instruction
-    lower_input = user_input_to_use.lower()
+    lower_input = user_input_cleaned.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
     elif flirt_enable:
@@ -144,22 +135,13 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
-
-    # Lịch sử gửi Gemini
-    trimmed_history_to_send = history[2:] + [{"role": "user", "content": final_input_content}]
-    if len(history) <= 2:
-        trimmed_history_to_send = history + [{"role": "user", "content": final_input_content}]
+    final_input_content = f"{user_input_cleaned}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
 
     answer = ""
     for attempt in range(3):
         try:
-            # SDK 0.3.0: genai.models.generate_content(...)
-            response = await asyncio.to_thread(lambda: genai.models.generate_content(
-                model=MODEL_NAME,
-                contents=trimmed_history_to_send,
-                temperature=0.8
-            ))
+            # Gửi message tới chat session (SDK 0.3.0)
+            response = await asyncio.to_thread(chat.send_message, final_input_content)
             answer = response.text.strip()
             if answer:
                 break
@@ -169,11 +151,11 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             if attempt == 2:
                 return f"⚠️ Gemini đang lỗi: {type(e).__name__}"
 
-    # Lưu vào lịch sử
-    history.append({"role": "user", "content": user_input_to_use})
-    history.append({"role": "model", "content": answer})
-    session["message_count"] += 1
-    save_sessions()
+    # Lưu vào history (chỉ để tracking, chat session tự quản lý context)
+    session_data = active_chats[user_id]
+    session_data['message_count'] += 1
+    save_chat_sessions()
+
     return answer
 
 # ========== STATUS ==========
