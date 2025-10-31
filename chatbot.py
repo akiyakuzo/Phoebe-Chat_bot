@@ -14,14 +14,16 @@ from flask import Flask
 from threading import Thread
 from datetime import datetime
 
-# ========== GOOGLE GENAI (Gemini 2.0 Flash) ==========
+# ========== GOOGLE GENERATIVE AI (Gemini 2.0 Flash) ==========
 import google.generativeai as genai
+from google.generativeai.errors import APIError
 
-# Set API key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
-genai.configure(api_key=GEMINI_API_KEY)
+
+client = genai.Client(api_key=GEMINI_API_KEY)
+MODEL_NAME = "gemini-2.5-flash"  # Dùng model mới nhất
 
 # ========== CONFIG ==========
 BOT_NAME = "Fibi Béll 💖"
@@ -41,7 +43,7 @@ PHOBE_SAFE_INSTRUCTION = (
 )
 
 PHOBE_FLIRT_INSTRUCTION = (
-    "💞 Trả lời ngọt ngào,có chút dâm, trêu ghẹo, gợi cảm và táo bạo, thả thính liên tục. "
+    "💞 Trả lời ngọt ngào, trêu ghẹo, gợi cảm và táo bạo, thả thính liên tục. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại. "
     "Được dùng ngôn từ gợi cảm và lãng mạn. "
@@ -104,14 +106,15 @@ def save_sessions():
 
 def get_or_create_chat(user_id):
     if user_id not in active_chats:
+        # Tối ưu hóa 1: Dùng tin nhắn 0 và 1 để lưu System/Persona/Instruction
         initial = [
             {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
-            {"role": "assistant", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
+            {"role": "model", "content": "Em đây, anh muốn hỏi gì nè? (* / ω \\ *)"} # Đã sửa câu trả lời để bot có vẻ tự nhiên hơn
         ]
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI 2.0 FLASH (0.8.5) ==========
+# ========== ASK GEMINI (TỐI ƯU TOKEN & SDK 0.3.0) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -120,17 +123,21 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     if not user_input:
         return "⚠️ Không nhận được câu hỏi, anh thử lại nhé!"
 
+    user_input_cleaned = user_input.encode("utf-8", errors="ignore").decode()
+    if not user_input_cleaned:
+        return "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
+
+    # Reset History nếu quá dài (chỉ giữ lại 2 tin nhắn khởi tạo)
     if len(history) > HISTORY_LIMIT + 2:
-        last_message = user_input
-        session["history"] = [
-            {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
-            {"role": "assistant", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
-        ]
+        print(f"⚠️ Reset history user {user_id}")
+        last_message = user_input_cleaned
+        session["history"] = history[:2] 
         history = session["history"]
         user_input_to_use = last_message
     else:
-        user_input_to_use = user_input
+        user_input_to_use = user_input_cleaned
 
+    # Lựa chọn Instruction
     lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
@@ -139,30 +146,48 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    prompt_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history[-HISTORY_LIMIT:]])
-    prompt_text += f"\nuser: {user_input_to_use}\nassistant:"
+    # Gộp Instruction vào Input cuối cùng (là cách duy nhất để duy trì persona/style)
+    final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
+    
+    # Tối ưu hóa 2: Loại bỏ 2 tin nhắn khởi tạo (index 0 và 1) khỏi mảng gửi đi
+    # Chỉ gửi các tin nhắn hội thoại thực tế + tin nhắn mới nhất
+    trimmed_history_to_send = history[2:] + [{"role": "user", "content": final_input_content}]
+    
+    # Nếu lịch sử rỗng (vừa reset hoặc lần đầu), ta gửi toàn bộ để model hiểu bối cảnh
+    if len(history) <= 2:
+         trimmed_history_to_send = history + [{"role": "user", "content": final_input_content}]
 
-    # === RETRY GEMINI ===
+
     answer = ""
     for attempt in range(3):
         try:
-            response = await asyncio.to_thread(lambda: genai.Chat.create(
-                model="gemini-2.0-flash",
-                messages=[{"role": "user", "content": prompt_text}],
-                temperature=0.8,
-                max_output_tokens=512
+            response = await asyncio.to_thread(lambda: client.models.generate_content(
+                model=MODEL_NAME,
+                contents=trimmed_history_to_send, # Truyền LIST lịch sử đã tối ưu
+                temperature=0.8
             ))
-            answer = response.choices[0].message.content.strip()
+
+            answer = response.text.strip()
             if answer:
                 break
-        except Exception as e:
-            print(f"Lỗi Gemini: {e}, thử lại {attempt+1}/3")
+        except APIError as e:
+            print(f"❌ APIError: {e}, thử lại {attempt+1}/3")
             await asyncio.sleep(2 ** attempt)
+            if attempt == 2:
+                err_msg = str(e)
+                return f"⚠️ Gemini gặp sự cố: {err_msg[:60]}..."
+        except Exception as e:
+            print(f"❌ Lỗi khác: {type(e).__name__} - {e}, thử lại {attempt+1}/3")
+            await asyncio.sleep(2 ** attempt)
+            if attempt == 2:
+                return f"⚠️ Gemini đang lỗi: {type(e).__name__}"
     else:
         answer = "⚠️ Gemini 2.0 Flash không phản hồi, thử lại sau nhé!"
 
+    # Lưu vào lịch sử (lưu cả prompt ban đầu, nhưng chỉ lưu nội dung sạch vào message)
+    # LƯU Ý: Lịch sử ở đây vẫn bao gồm 2 tin nhắn khởi tạo đầu tiên (history[:2])
     history.append({"role": "user", "content": user_input_to_use})
-    history.append({"role": "assistant", "content": answer})
+    history.append({"role": "model", "content": answer})
     session["message_count"] += 1
     save_sessions()
     return answer
@@ -179,7 +204,7 @@ activity_list = [
 async def random_status():
     global flirt_enable
     if flirt_enable:
-         activity = discord.Game("💞 Phoebe Dâm ON")
+         activity = discord.Game("💞 Phoebe Quyến Rũ ON")
     else:
          activity = random.choice(activity_list)
     await bot.change_presence(status=random.choice(status_list), activity=activity)
@@ -196,6 +221,7 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {answer}",
         color=0xFFC0CB
     )
+    # Giữ lại các URL hình ảnh mở rộng
     embed.set_thumbnail(url=random.choice([
         "https://files.catbox.moe/2474tj.png","https://files.catbox.moe/66v9vw.jpg",
         "https://files.catbox.moe/ezqs00.jpg","https://files.catbox.moe/yow35q.png",
@@ -263,7 +289,7 @@ def healthz():
     return {"status": "ok", "message": "Phoebe khỏe mạnh nè~ 💖"}, 200
 
 def run_flask():
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
 
 def keep_alive():
     thread = Thread(target=run_flask, daemon=True)
