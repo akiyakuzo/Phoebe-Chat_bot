@@ -1,4 +1,4 @@
-# ==== Patch cho Python 3.11.4 ====
+# ==== PATCH PYTHON 3.11 ====
 import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
 
@@ -9,28 +9,51 @@ from flask import Flask
 from threading import Thread
 from datetime import datetime
 import google.genai as genai
-from google.genai.errors import APIError
+from google.genai.errors import APIError, ValidationError
 
 # ========== CONFIG ==========
 BOT_NAME = "Phoebe Xinh Đẹp 💖"
 TOKEN = os.getenv("TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
+HISTORY_LIMIT = 20
 SESSIONS_FILE = "sessions.json"
-HISTORY_LIMIT = 20  # Số tin nhắn tối đa lưu trữ trong session
 
 if not TOKEN or not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu TOKEN hoặc GEMINI_API_KEY!")
+
+# ========== STYLE INSTRUCTIONS ==========
+PHOBE_SAFE_INSTRUCTION = (
+    "✨ Trả lời thân mật, tự nhiên, dễ thương. "
+    "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
+    "Không viết mô tả hành động hay độc thoại nội tâm. "
+    "Tối đa 120 từ."
+)
+
+PHOBE_FLIRT_INSTRUCTION = (
+    "💞 Trả lời ngọt ngào, trêu ghẹo nhẹ, gợi cảm, thả thính liên tục. "
+    "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
+    "Không viết mô tả hành động hay độc thoại. "
+    "Được dùng ngôn từ gợi cảm hay lãng mạn. "
+    "Tối đa 120 từ."
+)
+
+PHOBE_COMFORT_INSTRUCTION = (
+    "🌸 Trả lời nhẹ nhàng, an ủi và quan tâm, như một người bạn thật sự. "
+    "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
+    "Giữ phong thái dịu dàng, ấm áp và khích lệ tinh thần. "
+    "Không dùng ngôn từ gợi cảm hay lãng mạn. "
+    "Tối đa 120 từ."
+)
 
 # ========== PROMPTS ==========
 PHOBE_BASE_PROMPT = """
 Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 
 **Persona:** thông minh, tinh nghịch, dễ thương, thân mật và quyến rũ, thích thả thính.  
-**Cách trò chuyện:**  
-- Trả lời như chat thật, ngắn gọn, dễ hiểu.  
+**Cách trò chuyện:** - Trả lời như chat thật, ngắn gọn, dễ hiểu.  
 - Không mô tả hành động hay viết độc thoại nội tâm trong ngoặc.  
-- Có thể dùng các biểu cảm mặt cười hoặc emoji kiểu: (* / ω \ *), (✿◠‿◠), ('~'), (・・;)  
+- Có thể dùng các biểu cảm mặt cười hoặc emoji kiểu: (* / ω \\ *), (✿◠‿◠), ('~'), (・・;)  
 - Dùng ngôi xưng "em" và "anh".
 """.strip()
 
@@ -41,8 +64,7 @@ Lớn lên trong ngôi đền ven biển, Phoebe luôn tin vào ánh sáng dẫn
 Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát vọng bảo vệ mọi người.  
 Ánh sáng từ biển cả là niềm tin, là lời hứa mà cô không bao giờ quên.  
 
-**Những người bạn thân ở Rinascita:**  
-- **Brant:** chiến sĩ trẻ chính trực, luôn bảo vệ thành phố khỏi hiểm nguy. Phoebe ngưỡng mộ lòng dũng cảm và tinh thần kiên định của anh.  
+**Những người bạn thân ở Rinascita:** - **Brant:** chiến sĩ trẻ chính trực, luôn bảo vệ thành phố khỏi hiểm nguy. Phoebe ngưỡng mộ lòng dũng cảm và tinh thần kiên định của anh.  
 - **Zani:** Đặc vụ an ninh của Averardo Bank, gauntlets là vũ khí, Spectro là yếu tố của cô – nghiêm túc nhưng vẫn giữ được nụ cười và cảm giác đồng đội với Phoebe.  
 - **Rover:** người du hành mà Phoebe tin tưởng nhất — ánh sáng dịu dàng soi đường cho trái tim cô.
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.  
@@ -50,43 +72,19 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 Cùng nhau, họ đại diện cho tinh thần của Rinascita: nơi biển cả, ánh sáng và niềm tin giao hòa.
 """.strip()
 
-# ========== STYLE INSTRUCTIONS ==========
-PHOBE_SAFE_INSTRUCTION = (
-    "✨ Trả lời thân mật, tự nhiên, dễ thương. "
-    "Có thể dùng các biểu cảm mặt cười như (* / ω \ *), (✿◠‿◠). "
-    "Không viết mô tả hành động hay độc thoại nội tâm. "
-    "Tối đa 120 từ."
-)
-
-PHOBE_FLIRT_INSTRUCTION = (
-    "💞 Trả lời ngọt ngào, trêu ghẹo nhẹ, gợi cảm, thả thính liên tục. "
-    "Có thể dùng các biểu cảm mặt cười như (* / ω \ *), (✿◠‿◠). "
-    "Không viết mô tả hành động hay độc thoại. "
-    "Được dùng ngôn từ gợi cảm hay lãng mạn. "
-    "Tối đa 120 từ."
-)
-
-PHOBE_COMFORT_INSTRUCTION = (
-    "🌸 Trả lời nhẹ nhàng, an ủi và quan tâm, như một người bạn thật sự. "
-    "Có thể dùng các biểu cảm mặt cười như (* / ω \ *), (✿◠‿◠). "
-    "Giữ phong thái dịu dàng, ấm áp và khích lệ tinh thần. "
-    "Không dùng ngôn từ gợi cảm hay lãng mạn. "
-    "Tối đa 120 từ."
-)
-
 # ========== GEMINI CLIENT ==========
 client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-2.5-flash"
 
-# ========== DISCORD BOT ==========
+# ========== DISCORD CONFIG ==========
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# ========== SESSION MANAGEMENT ==========
+# ========== SESSION SYSTEM ==========
 flirt_enable = False
-active_chats = {}  # {user_id: {'history': [...], 'message_count': int, 'created_at': datetime}}
+active_chats = {}
 
 def load_sessions():
     global active_chats
@@ -94,9 +92,9 @@ def load_sessions():
         try:
             with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
                 active_chats = json.load(f)
-            print(f"💾 Đã tải {len(active_chats)} session cũ từ {SESSIONS_FILE}")
+            print(f"💾 Đã tải {len(active_chats)} session từ {SESSIONS_FILE}")
         except Exception as e:
-            print(f"⚠️ Không thể load sessions: {e}")
+            print(f"⚠️ Lỗi load sessions: {e}")
             active_chats = {}
     else:
         active_chats = {}
@@ -106,56 +104,48 @@ def save_sessions():
         with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
             json.dump(active_chats, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"⚠️ Lỗi khi lưu session: {e}")
+        print(f"⚠️ Lỗi lưu sessions: {e}")
 
-def get_or_create_chat(user_id: str):
+def get_or_create_chat(user_id):
     if user_id not in active_chats:
-        initial_history = [
+        initial = [
             {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
             {"role": "model", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
         ]
-        active_chats[user_id] = {
-            "history": initial_history,
-            "message_count": 0,
-            "created_at": str(datetime.now())
-        }
+        active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== BOT STATUS ==========
-status_list = [
-    "💖 Tâm sự cùng Phoebe",
-    "🎵 Nghe nhạc Wuthering Waves",
-    "🌸 Thả thính nhẹ nhàng",
-    "✨ Giao lưu cùng anh",
-    "🍵 Thưởng trà cùng bạn bè",
-]
-
-@tasks.loop(minutes=5)
-async def change_status():
-    await bot.wait_until_ready()
-    new_status = random.choice(status_list)
-    activity = discord.Game(name=new_status)
-    await bot.change_presence(status=discord.Status.online, activity=activity)
-
-# ========== HELPER: ASK GEMINI ==========
+# ========== ASK GEMINI (ĐÃ TỐI ƯU ỔN ĐỊNH & CHỐNG VALIDATION ERROR) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     session = get_or_create_chat(user_id)
-    history = session['history']
+    history = session["history"]
 
-    # 🌟 RESET HISTORY NẾU QUÁ DÀI
+    # 1. 🧼 Làm sạch Input: Loại bỏ khoảng trắng thừa và ký tự không chuẩn
+    user_input = user_input.strip()
+    if not user_input:
+        return "⚠️ Không nhận được câu hỏi, anh thử lại nhé!"
+    
+    # Loại bỏ ký tự Unicode không chuẩn gây lỗi (khắc phục lỗi ValidationError)
+    user_input_cleaned = user_input.encode("utf-8", errors="ignore").decode()
+    if not user_input_cleaned:
+        return "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
+
+    # 2. 🌟 Reset History nếu quá dài
     if len(history) > HISTORY_LIMIT + 2:
-        print(f"⚠️ History của user {user_id} quá dài ({len(history)} tin), đang reset.")
-        last_message = user_input
-        session['history'] = [
+        print(f"⚠️ Reset history user {user_id}")
+        last_message = user_input_cleaned
+        session["history"] = [
             {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
             {"role": "model", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
         ]
-        session['message_count'] = 0
-        user_input = last_message
-        history = session['history']  # cập nhật lại reference
+        history = session["history"]
+        user_input_to_use = last_message
+    else:
+        user_input_to_use = user_input_cleaned
 
-    lower_input = user_input.lower()
-    if any(w in lower_input for w in ["buồn", "mệt", "stress", "chán", "khó chịu", "tệ quá"]):
+    # 3. 🎭 Lựa chọn Instruction
+    lower_input = user_input_to_use.lower()
+    if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
     elif flirt_enable:
         instruction = PHOBE_FLIRT_INSTRUCTION
@@ -163,60 +153,92 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
         instruction = PHOBE_SAFE_INSTRUCTION
 
     for attempt in range(3):
-        history.append({"role": "user", "content": user_input})
-
+        # Thêm input đã được làm sạch vào history
+        history.append({"role": "user", "content": user_input_to_use})
+        
         try:
+            # 4. ✂️ Cắt ngắn History khi gọi API (chỉ gửi HISTORY_LIMIT tin gần nhất + prompt hệ thống)
+            trimmed_history = history[-HISTORY_LIMIT:]
+            
             response = await asyncio.to_thread(lambda: client.models.generate_content(
                 model=MODEL_NAME,
-                contents=history,
+                contents=trimmed_history, # SỬ DỤNG HISTORY ĐÃ CẮT
                 config={"temperature": 0.8}
             ))
+            
             answer = getattr(response, "text", "").strip()
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
-
+                
             history.append({"role": "model", "content": answer})
-            session['message_count'] += 1
+            session['message_count'] += 1 # Đừng quên tăng count
             save_sessions()
             return answer
 
-        except APIError as api_err:
-            if history and history[-1]['role'] == 'user': 
+        # 5. 🚫 Xử lý lỗi: Bắt ValidationError riêng
+        except ValidationError as ve:
+            print(f"⚠️ ValidationError: {ve}")
+            if history and history[-1]["role"] == "user": 
                 history.pop()
-            save_sessions()
-            if api_err.code in [7, 9]:
-                return "❌ LỖI KẾT NỐI/KEY: Key có thể sai, hết hạn, hoặc cần Set Billing."
-            if attempt < 2:
-                await asyncio.sleep(2)
-            else:
-                return f"⚠️ LỖI MẠNG/SERVER: {api_err.message[:60]}..."
+            # Gợi ý cho người dùng nhập lại nội dung đơn giản hơn
+            return "⚠️ Nội dung vừa gửi **không hợp lệ** với Gemini, thử nhập lại nhẹ nhàng, không dùng ký tự lạ nhé!"
 
+        except APIError as e:
+            if history and history[-1]["role"] == "user": history.pop()
+            print(f"❌ APIError: {e}")
+            save_sessions()
+            if attempt < 2: await asyncio.sleep(2)
+            else: return f"⚠️ Gemini gặp sự cố: {e.message[:60]}..."
+            
         except Exception as e:
-            print(f"❌ LỖI GEMINI CHUNG KHÔNG PHẢI APIError: {type(e).__name__} - {e}")
-            if history and history[-1]['role'] == 'user': 
-                history.pop()
+            print(f"❌ Lỗi khác: {type(e).__name__} - {e}")
+            if history and history[-1]["role"] == "user": history.pop()
             save_sessions()
-            if attempt < 2:
-                await asyncio.sleep(2)
-            else:
-                return f"⚠️ Gemini đang gặp sự cố: Lỗi {type(e).__name__}, thử lại sau nhé!"
+            if attempt < 2: await asyncio.sleep(2)
+            else: return f"⚠️ Gemini đang lỗi: {type(e).__name__}"
+            
+    return "⚠️ Gemini không phản hồi, thử lại sau nhé!"
 
-    return "⚠️ Gemini đang gặp sự cố, thử lại sau nhé!"
+# ========== STATUS ==========
+status_list = [discord.Status.online, discord.Status.idle, discord.Status.dnd]
+activity_list = [
+    discord.Game("💖 Trò chuyện cùng anh"),
+    discord.Game("✨ Thả thính nhẹ nhàng"),
+    discord.Game("🌸 An ủi tinh thần")
+]
+
+@tasks.loop(minutes=10)
+async def random_status():
+    global flirt_enable
+    # Cập nhật activity ngẫu nhiên, nếu flirt_enable thì ưu tiên hiển thị trạng thái flirt
+    if flirt_enable:
+         activity = discord.Game("💞 Flirt Mode ON")
+    else:
+         activity = random.choice(activity_list)
+         
+    await bot.change_presence(status=random.choice(status_list), activity=activity)
 
 # ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
 async def hoi(interaction: discord.Interaction, cauhoi: str):
-    user_id = str(interaction.user.id)
     await interaction.response.defer(thinking=True)
+    user_id = str(interaction.user.id)
     answer = await ask_gemini(user_id, cauhoi)
+
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {answer}",
         color=0xFFC0CB
     )
-    # Thêm link và hình ảnh embed
-    embed.set_thumbnail(url="https://cdn.discordapp.com/avatars/{user_id}/{user_id}.png?size=128")
-    embed.add_field(name="Link gốc", value=f"[Click xem]()", inline=False)
+    embed.set_thumbnail(url=random.choice([
+        "https://files.catbox.moe/2474tj.png", "https://files.catbox.moe/66v9vw.jpg", 
+        "https://files.catbox.moe/ezqs00.jpg", "https://files.catbox.moe/yow35q.png", 
+        "https://files.catbox.moe/pzbhdp.jpg", "https://files.catbox.moe/lyklnj.jpg", 
+        "https://files.catbox.moe/i5sqkr.png", "https://files.catbox.moe/jt184o.jpg", 
+        "https://files.catbox.moe/9nq5kw.jpg", "https://files.catbox.moe/45tre3.webp", 
+        "https://files.catbox.moe/2y17ot.png", "https://files.catbox.moe/gg8pt0.jpg", 
+        "https://files.catbox.moe/jkboop.png"
+    ]))
     await interaction.followup.send(embed=embed)
 
 @tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
@@ -225,46 +247,69 @@ async def delete_conv(interaction: discord.Interaction):
     if user_id in active_chats:
         del active_chats[user_id]
         save_sessions()
-        msg = "🧹 Phobe đã dọn sạch trí nhớ, sẵn sàng trò chuyện lại nè~ 💖"
+        msg = "🧹 Phoebe đã dọn sạch trí nhớ, sẵn sàng nói chuyện lại nè~ 💖"
     else:
-        msg = "Trí nhớ của em trống trơn rồi! 🥺"
+        msg = "Trí nhớ của em trống trơn rồi mà~ 🥺"
     await interaction.response.send_message(msg, ephemeral=True)
 
-@tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt mode (quyến rũ nhẹ)")
+# 🛡️ Admin-only Flirt Mode
+@tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt Mode (Admin-only)")
 async def chat18plus(interaction: discord.Interaction, enable: bool):
+    if not interaction.user.guild_permissions.manage_guild:
+        await interaction.response.send_message(
+            "❌ Anh không có quyền **Quản lý máy chủ** để bật/tắt Flirt Mode đâu nè~ 🥺",
+            ephemeral=True
+        )
+        return
+
     global flirt_enable
     flirt_enable = enable
     status = "BẬT" if enable else "TẮT"
-    await interaction.response.send_message(f"🔞 Flirt mode {status} cho tất cả các cuộc trò chuyện.", ephemeral=True)
+    
+    # Cập nhật trạng thái bot
+    new_activity = discord.Game(f"💞 Flirt Mode {status}")
+    await interaction.client.change_presence(activity=new_activity)
 
-# ===== FLASK APP =====
+    await interaction.response.send_message(
+        f"🔞 Flirt Mode **{status}** cho **toàn bộ bot**. Phoebe sẽ trở nên {'ngọt ngào hơn~ 💖' if enable else 'hiền lành trở lại~ 🌸'}",
+        ephemeral=False
+    )
+
+# ========== FLASK ==========
+
 app = Flask(__name__)
 
-@app.route("/", methods=["GET"])
+@app.route("/")
 def home():
-    return f"<h1>{BOT_NAME} đang chạy 🚀</h1>", 200
+    return "Phoebe Xinh Đẹp đang hoạt động! 🌸"
 
-@app.route("/healthz", methods=["GET"])
+@app.route("/healthz")
 def healthz():
-    return "OK", 200
+    return {"status": "ok", "message": "Phoebe khỏe mạnh nè~ 💖"}, 200
 
 def run_flask():
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+    app.run(host="0.0.0.0", port=8080)
 
-# ===== BOT READY EVENT =====
+def keep_alive():
+    t = threading.Thread(target=run_flask)
+    t.daemon = True
+    t.start()
+
+# ========== BOT EVENTS ==========
 @bot.event
 async def on_ready():
     print(f"✅ {BOT_NAME} đã sẵn sàng! Logged in as {bot.user}")
     load_sessions()
+    random_status.start()
     if GUILD_ID:
-        await tree.sync(guild=discord.Object(GUILD_ID))
-        print(f"🔄 Commands đã sync cho guild {GUILD_ID}")
+        guild = discord.Object(GUILD_ID)
+        await tree.sync(guild=guild)
+        print(f"🔄 Slash commands đã sync cho guild {GUILD_ID}")
     else:
         await tree.sync()
-        print("🔄 Commands đã sync global")
-    change_status.start()
+        print("🔄 Slash commands đã sync toàn cầu")
 
-# ===== RUN BOT + FLASK =====
+# ========== RUN ==========
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
     bot.run(TOKEN)
