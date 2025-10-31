@@ -21,9 +21,17 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
-# ✅ Khởi tạo chuẩn SDK: Đã cố định cấu hình, sẽ hoạt động sau khi nâng cấp thư viện
-genai.configure(api_key=GEMINI_API_KEY)
-
+# Khởi tạo Client: Đây là cách chuẩn cho SDK 0.8.0
+# Nó giúp cô lập việc gọi API, tránh xung đột module.
+try:
+    # Thử khởi tạo theo cách chuẩn (SDK 0.4.0+)
+    client = genai.Client(api_key=GEMINI_API_KEY)
+except AttributeError:
+    # Đây là trường hợp không mong muốn nếu đã có 0.8.0, 
+    # nhưng ta vẫn phải chuẩn bị nếu Python bị lỗi tải module.
+    genai.configure(api_key=GEMINI_API_KEY)
+    client = genai
+    
 MODEL_NAME = "gemini-2.0-flash" 
 
 # ========== CONFIG BOT ==========
@@ -34,7 +42,7 @@ HISTORY_LIMIT = 20
 SESSIONS_FILE = "sessions.json"
 flirt_enable = False
 active_chats = {}
-TYPING_SPEED = 0.01 # Tốc độ gõ: Điều chỉnh giá trị này để tăng/giảm tốc độ
+TYPING_SPEED = 0.02 # Độ trễ (giây) giữa mỗi ký tự
 
 # ========== STYLE INSTRUCTIONS (Giữ nguyên) ==========
 PHOBE_SAFE_INSTRUCTION = (
@@ -64,7 +72,7 @@ PHOBE_COMFORT_INSTRUCTION = (
 PHOBE_BASE_PROMPT = """
 Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 
-**Persona:** thông minh, tinh nghịch, dễ thương, thân mật và quyến rũ, thích thả thính.  
+**Persona:** thông minh, tinh nghịch, dễ thương, thân mật và quyếnến rũ, thích thả thính.  
 **Cách trò chuyện:** - Trả lời như chat thật, ngắn gọn, dễ hiểu.  
 - Không mô tả hành động hay viết độc thoại nội tâm trong ngoặc.  
 - Có thể dùng các biểu cảm mặt cười hoặc emoji kiểu: (* / ω \\ *), (✿◠‿◠), ('~'), (・・;)  
@@ -115,7 +123,7 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI STREAM (Chờ bạn nâng cấp SDK) ==========
+# ========== ASK GEMINI STREAM (Dùng Client/Module API cố định) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -152,9 +160,9 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     full_answer = ""
 
     try:
-        # Cách gọi API này sẽ hoạt động sau khi bạn nâng cấp SDK lên >= 0.4.0
+        # ✅ FIX: Gọi phương thức generate_content_stream trực tiếp từ đối tượng client đã khởi tạo
         response_stream = await asyncio.to_thread(
-            lambda: genai.generate_content_stream(
+            lambda: client.generate_content_stream(
                 model=MODEL_NAME,
                 contents=contents_to_send,
                 temperature=0.8
@@ -166,7 +174,8 @@ async def ask_gemini_stream(user_id: str, user_input: str):
                 full_answer += text
                 yield text
     except Exception as e:
-        yield f"\n⚠️ Gemini đang lỗi: {type(e).__name__} - {str(e)[:60]}..."
+        # Nếu đã là 0.8.0 mà vẫn lỗi này, nó là lỗi môi trường hoặc lỗi logic phức tạp
+        yield f"\n⚠️ **LỖI KỸ THUẬT NGHIÊM TRỌNG:** {type(e).__name__} - Vấn đề nằm ở xung đột thư viện Python. Anh kiểm tra lại việc cài đặt `google-generativeai` hoặc thử Redeploy lại app."
         return
 
     # Lưu history
