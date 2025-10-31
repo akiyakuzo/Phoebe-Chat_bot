@@ -175,14 +175,6 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             save_sessions()
             return answer
 
-        # 5. 🚫 Xử lý lỗi: Bắt ValidationError riêng
-        except ValidationError as ve:
-            print(f"⚠️ ValidationError: {ve}")
-            if history and history[-1]["role"] == "user": 
-                history.pop()
-            # Gợi ý cho người dùng nhập lại nội dung đơn giản hơn
-            return "⚠️ Nội dung vừa gửi **không hợp lệ** với Gemini, thử nhập lại nhẹ nhàng, không dùng ký tự lạ nhé!"
-
         except APIError as e:
             if history and history[-1]["role"] == "user": history.pop()
             print(f"❌ APIError: {e}")
