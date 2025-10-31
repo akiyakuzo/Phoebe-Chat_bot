@@ -21,9 +21,11 @@ if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
 try:
-    genai.configure(api_key=GEMINI_API_KEY)
+    # ✅ SỬ DỤNG LẠI genai.Client() ĐỂ TẠO BIẾN 'client'
+    client = genai.Client(api_key=GEMINI_API_KEY) 
 except Exception as e:
-    raise RuntimeError(f"Lỗi khởi tạo Gemini: {e}")
+    # Bắt lỗi nếu SDK 0.8.0 vẫn bị lỗi môi trường
+    raise RuntimeError(f"Lỗi khởi tạo Gemini Client: {e}")
 
 MODEL_NAME = "gemini-2.0-flash"
 
