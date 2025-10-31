@@ -21,9 +21,9 @@ if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
 try:
-    client = genai.Client(api_key=GEMINI_API_KEY)
-except AttributeError as e:
-    raise RuntimeError(f"Lỗi khởi tạo Gemini Client: {e}")
+    genai.configure(api_key=GEMINI_API_KEY)
+except Exception as e:
+    raise RuntimeError(f"Lỗi khởi tạo Gemini: {e}")
 
 MODEL_NAME = "gemini-2.0-flash"
 
@@ -45,7 +45,7 @@ PHOBE_SAFE_INSTRUCTION = (
     "Tối đa 120 từ."
 )
 PHOBE_FLIRT_INSTRUCTION = (
-    "💞 Trả lời ngọt ngào,có chút dâm, trêu ghẹo, gợi cảm và táo bạo, thả thính liên tục. "
+    "💞 Trả lời ngọt ngào, có chút dâm, trêu ghẹo, gợi cảm và táo bạo, thả thính liên tục. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại. "
     "Được dùng ngôn từ gợi cảm và lãng mạn. "
@@ -139,7 +139,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     full_answer = ""
     try:
         response_stream = await asyncio.to_thread(
-            lambda: client.models.generate_content_stream(
+            lambda: genai.models.generate_content_stream(
                 model=MODEL_NAME,
                 contents=contents_to_send,
                 temperature=0.8
