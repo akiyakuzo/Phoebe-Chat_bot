@@ -9,7 +9,7 @@ from flask import Flask
 from threading import Thread
 from datetime import datetime
 import google.genai as genai
-from google.genai.errors import APIError, ValidationError
+from google.genai.errors import APIError
 
 # ========== CONFIG ==========
 BOT_NAME = "Fibi Béll 💖"
