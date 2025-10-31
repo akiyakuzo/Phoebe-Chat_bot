@@ -20,11 +20,10 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
+# ✅ SỬA LỖI 1: Dùng genai.Client() để tạo biến 'client'
 try:
-    # ✅ SỬ DỤNG LẠI genai.Client() ĐỂ TẠO BIẾN 'client'
-    client = genai.Client(api_key=GEMINI_API_KEY) 
+    client = genai.Client(api_key=GEMINI_API_KEY)
 except Exception as e:
-    # Bắt lỗi nếu SDK 0.8.0 vẫn bị lỗi môi trường
     raise RuntimeError(f"Lỗi khởi tạo Gemini Client: {e}")
 
 MODEL_NAME = "gemini-2.0-flash"
@@ -37,7 +36,7 @@ HISTORY_LIMIT = 20
 SESSIONS_FILE = "sessions.json"
 flirt_enable = False
 active_chats = {}
-TYPING_SPEED = 0.01
+TYPING_SPEED = 0.01 # Đã cập nhật tốc độ gõ
 
 # ========== STYLE INSTRUCTIONS ==========
 PHOBE_SAFE_INSTRUCTION = (
@@ -50,7 +49,7 @@ PHOBE_FLIRT_INSTRUCTION = (
     "💞 Trả lời ngọt ngào, có chút dâm, trêu ghẹo, gợi cảm và táo bạo, thả thính liên tục. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại. "
-    "Được dùng ngôn từ gợi cảm và lãng mạng có cả gợi tình nhẹ. "
+    "Được dùng ngôn từ gợi cảm và lãng mạng có cả gợi tình nhẹ. " # Đã cập nhật
     "Tối đa 120 từ."
 )
 PHOBE_COMFORT_INSTRUCTION = (
@@ -61,7 +60,7 @@ PHOBE_COMFORT_INSTRUCTION = (
     "Tối đa 120 từ."
 )
 
-# ========== PROMPTS ==========
+# ========== PROMPTS (Đã cập nhật Lore) ==========
 PHOBE_BASE_PROMPT = """
 Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 
@@ -85,7 +84,7 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
-# ========== SESSION SYSTEM ==========
+# ========== SESSION SYSTEM (Giữ nguyên) ==========
 def load_sessions():
     global active_chats
     if os.path.exists(SESSIONS_FILE):
@@ -110,7 +109,7 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI STREAM ==========
+# ========== ASK GEMINI STREAM (Giữ nguyên, sử dụng 'client') ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -143,7 +142,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     full_answer = ""
 
     try:
-        # ✅ DÙNG client.models.generate_content_stream để đảm bảo không lỗi AttributeError
+        # ✅ SỬA LỖI 1 (Gián tiếp): Gọi 'client' đã được tạo ở đầu file
         response_stream = await asyncio.to_thread(
             lambda: client.models.generate_content_stream(
                 model=MODEL_NAME,
@@ -171,7 +170,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# ========== BOT STATUS ==========
+# ========== BOT STATUS (Giữ nguyên) ==========
 status_list = [discord.Status.online, discord.Status.idle, discord.Status.dnd]
 activity_list = [
     discord.Game("💖 Trò chuyện cùng anh"),
@@ -188,7 +187,7 @@ async def random_status():
         activity = random.choice(activity_list)
     await bot.change_presence(status=random.choice(status_list), activity=activity)
 
-# ========== FLASK SERVER ==========
+# ========== FLASK SERVER (Giữ nguyên) ==========
 app = Flask(__name__)
 
 @app.route("/")
@@ -212,12 +211,11 @@ def keep_alive():
 async def hoi(interaction: discord.Interaction, cauhoi: str):
     await interaction.response.defer(thinking=True)
     user_id = str(interaction.user.id)
-    answer = ""
-    async for chunk in ask_gemini_stream(user_id, cauhoi):
-        answer += chunk
+    
+    # ✅ SỬA LỖI 2: Thêm lại logic Typing Effect
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
-        description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {answer}",
+        description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** Đang gõ...",
         color=0xFFC0CB
     )
     embed.set_thumbnail(url=random.choice([
@@ -227,7 +225,24 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
         "https://files.catbox.moe/45tre3.webp","https://files.catbox.moe/2y17ot.png","https://files.catbox.moe/gg8pt0.jpg",
         "https://files.catbox.moe/jkboop.png"
     ]))
-    await interaction.followup.send(embed=embed)
+    response_message = await interaction.followup.send(embed=embed)
+
+    full_response = ""
+    char_count_to_edit = 0
+    
+    async for chunk in ask_gemini_stream(user_id, cauhoi):
+        for char in chunk:
+            full_response += char
+            char_count_to_edit += 1
+            
+            if char_count_to_edit % 5 == 0:
+                display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
+                embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {display_text} |"
+                await response_message.edit(embed=embed)
+                await asyncio.sleep(TYPING_SPEED) 
+
+    embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {full_response}"
+    await response_message.edit(embed=embed)
 
 @tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
 async def delete_conv(interaction: discord.Interaction):
