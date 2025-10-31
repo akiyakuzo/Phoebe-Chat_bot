@@ -21,10 +21,12 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
-# ✅ Khởi tạo chuẩn SDK 0.3.0
+# ✅ KHỞI TẠO CHUẨN cho SDK 0.3.0
 genai.configure(api_key=GEMINI_API_KEY)
-# Đã xác nhận model
-MODEL_NAME = "gemini-2.0-flash"
+# Sử dụng module genai làm đối tượng gọi API (như bản 0.3.0)
+API_CALLER = genai
+
+MODEL_NAME = "gemini-2.0-flash" 
 
 # ========== CONFIG BOT ==========
 BOT_NAME = "Fibi Béll 💖"
@@ -34,8 +36,7 @@ HISTORY_LIMIT = 20
 SESSIONS_FILE = "sessions.json"
 flirt_enable = False
 active_chats = {}
-# Thêm hằng số tốc độ gõ
-TYPING_SPEED = 0.02 # Độ trễ (giây) giữa mỗi ký tự
+TYPING_SPEED = 0.01 # Độ trễ (giây) giữa mỗi ký tự
 
 # ========== STYLE INSTRUCTIONS (Giữ nguyên) ==========
 PHOBE_SAFE_INSTRUCTION = (
@@ -63,7 +64,7 @@ PHOBE_COMFORT_INSTRUCTION = (
 
 # ========== PROMPTS (Giữ nguyên) ==========
 PHOBE_BASE_PROMPT = """
-Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
+Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuther Waves.
 
 **Persona:** thông minh, tinh nghịch, dễ thương, thân mật và quyến rũ, thích thả thính.  
 **Cách trò chuyện:** - Trả lời như chat thật, ngắn gọn, dễ hiểu.  
@@ -116,7 +117,7 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI STREAM (Sửa lỗi "models" không tồn tại) ==========
+# ========== ASK GEMINI STREAM (Sử dụng API_CALLER cố định là genai) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -153,9 +154,10 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     full_answer = ""
 
     try:
-        # ✅ FIX: Gọi trực tiếp genai.generate_content_stream thay vì genai.models.generate_content_stream
+        # ✅ FIX CUỐI CÙNG cho SDK 0.3.0: Gọi generate_content_stream trực tiếp từ module genai
+        # Vì ta đã đặt API_CALLER = genai
         response_stream = await asyncio.to_thread(
-            lambda: genai.generate_content_stream(
+            lambda: API_CALLER.generate_content_stream(
                 model=MODEL_NAME,
                 contents=contents_to_send,
                 temperature=0.8
