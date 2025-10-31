@@ -20,13 +20,15 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
-# ✅ SỬA LỖI 1: Dùng genai.Client() để tạo biến 'client'
-try:
-    client = genai.Client(api_key=GEMINI_API_KEY)
-except Exception as e:
-    raise RuntimeError(f"Lỗi khởi tạo Gemini Client: {e}")
+MODEL_NAME = "gemini-2.0-flash" # Phải khai báo model name TRƯỚC
 
-MODEL_NAME = "gemini-2.0-flash"
+try:
+    # ✅ KHỞI TẠO CHUẨN SDK 0.8.0
+    genai.configure(api_key=GEMINI_API_KEY)
+    # Tạo một đối tượng model toàn cục
+    gemini_model = genai.GenerativeModel(MODEL_NAME) 
+except Exception as e:
+    raise RuntimeError(f"Lỗi khởi tạo Gemini: {e}")
 
 # ========== CONFIG BOT ==========
 BOT_NAME = "Fibi Béll 💖"
@@ -36,7 +38,7 @@ HISTORY_LIMIT = 20
 SESSIONS_FILE = "sessions.json"
 flirt_enable = False
 active_chats = {}
-TYPING_SPEED = 0.01 # Đã cập nhật tốc độ gõ
+TYPING_SPEED = 0.01
 
 # ========== STYLE INSTRUCTIONS ==========
 PHOBE_SAFE_INSTRUCTION = (
@@ -49,7 +51,7 @@ PHOBE_FLIRT_INSTRUCTION = (
     "💞 Trả lời ngọt ngào, có chút dâm, trêu ghẹo, gợi cảm và táo bạo, thả thính liên tục. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại. "
-    "Được dùng ngôn từ gợi cảm và lãng mạng có cả gợi tình nhẹ. " # Đã cập nhật
+    "Được dùng ngôn từ gợi cảm và lãng mạng có cả gợi tình nhẹ. "
     "Tối đa 120 từ."
 )
 PHOBE_COMFORT_INSTRUCTION = (
@@ -60,7 +62,7 @@ PHOBE_COMFORT_INSTRUCTION = (
     "Tối đa 120 từ."
 )
 
-# ========== PROMPTS (Đã cập nhật Lore) ==========
+# ========== PROMPTS ==========
 PHOBE_BASE_PROMPT = """
 Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 
@@ -84,7 +86,7 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
-# ========== SESSION SYSTEM (Giữ nguyên) ==========
+# ========== SESSION SYSTEM ==========
 def load_sessions():
     global active_chats
     if os.path.exists(SESSIONS_FILE):
@@ -109,7 +111,7 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI STREAM (Giữ nguyên, sử dụng 'client') ==========
+# ========== ASK GEMINI STREAM ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -142,12 +144,12 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     full_answer = ""
 
     try:
-        # ✅ SỬA LỖI 1 (Gián tiếp): Gọi 'client' đã được tạo ở đầu file
+        # ✅ GỌI API CHUẨN SDK 0.8.0
         response_stream = await asyncio.to_thread(
-            lambda: client.models.generate_content_stream(
-                model=MODEL_NAME,
+            lambda: gemini_model.generate_content( # Sửa tên hàm
                 contents=contents_to_send,
-                temperature=0.8
+                stream=True, # Thêm stream=True
+                generation_config=genai.GenerationConfig(temperature=0.8) # Sửa cách truyền config
             )
         )
         for chunk in response_stream:
@@ -170,7 +172,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# ========== BOT STATUS (Giữ nguyên) ==========
+# ========== BOT STATUS ==========
 status_list = [discord.Status.online, discord.Status.idle, discord.Status.dnd]
 activity_list = [
     discord.Game("💖 Trò chuyện cùng anh"),
@@ -187,7 +189,7 @@ async def random_status():
         activity = random.choice(activity_list)
     await bot.change_presence(status=random.choice(status_list), activity=activity)
 
-# ========== FLASK SERVER (Giữ nguyên) ==========
+# ========== FLASK SERVER ==========
 app = Flask(__name__)
 
 @app.route("/")
@@ -205,14 +207,13 @@ def keep_alive():
     thread = Thread(target=run_flask, daemon=True)
     thread.start()
 
-# ========== SLASH COMMANDS ==========
+# ========== SLASH COMMANDS (Đã khôi phục Typing Effect) ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
 @app_commands.describe(cauhoi="Nhập câu hỏi của bạn")
 async def hoi(interaction: discord.Interaction, cauhoi: str):
     await interaction.response.defer(thinking=True)
     user_id = str(interaction.user.id)
-    
-    # ✅ SỬA LỖI 2: Thêm lại logic Typing Effect
+
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** Đang gõ...",
@@ -238,11 +239,17 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
             if char_count_to_edit % 5 == 0:
                 display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
                 embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {display_text} |"
-                await response_message.edit(embed=embed)
+                try:
+                    await response_message.edit(embed=embed)
+                except discord.errors.HTTPException:
+                    pass # Bỏ qua lỗi nếu Discord API bị rate limit
                 await asyncio.sleep(TYPING_SPEED) 
 
     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {full_response}"
-    await response_message.edit(embed=embed)
+    try:
+        await response_message.edit(embed=embed)
+    except discord.errors.HTTPException:
+        pass
 
 @tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
 async def delete_conv(interaction: discord.Interaction):
