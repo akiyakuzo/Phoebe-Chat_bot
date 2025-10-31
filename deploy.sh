@@ -16,9 +16,9 @@ echo "🔄 Upgrading pip, setuptools, wheel..."
 echo "📦 Installing dependencies..."
 "$PYTHON_BIN" -m pip install --upgrade -r requirements.txt
 
-# ==== 4. Kiểm tra version google-genai ====
-echo "🔍 Checking google-genai version..."
-"$PYTHON_BIN" -c "import google.genai; print('Google GenAI version:', google.genai.__version__)"
+# ==== 4. Kiểm tra version google-generativeai ====
+echo "🔍 Checking google-generativeai version..."
+"$PYTHON_BIN" -c "import google.generativeai as genai; print('Google GenAI version:', genai.__version__)"
 
 # ==== 5. Chạy bot ====
 echo "💫 Starting Phoebe..."
