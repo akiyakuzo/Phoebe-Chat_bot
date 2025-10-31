@@ -115,31 +115,31 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI (ỔN ĐỊNH & CHUẨN SDK 1.47.0) ==========
+# ========== ASK GEMINI (CHUẨN SDK 1.47.0 + CHỐNG VALIDATION ERROR) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     session = get_or_create_chat(user_id)
     history = session["history"]
 
+    # 1️⃣ Làm sạch input
     user_input = user_input.strip()
     if not user_input:
         return "⚠️ Không nhận được câu hỏi, anh thử lại nhé!"
-
+    
     user_input_cleaned = user_input.encode("utf-8", errors="ignore").decode()
     if not user_input_cleaned:
         return "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
 
+    # 2️⃣ Reset lịch sử nếu quá dài
     if len(history) > HISTORY_LIMIT + 2:
         print(f"⚠️ Reset history user {user_id}")
         last_message = user_input_cleaned
-        session["history"] = [
-            {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
-            {"role": "model", "content": "Em đã hiểu, em sẽ nhập vai đúng như mô tả nha~"}
-        ]
+        session["history"] = history[:2]  # giữ lại prompt gốc
         history = session["history"]
         user_input_to_use = last_message
     else:
         user_input_to_use = user_input_cleaned
 
+    # 3️⃣ Lựa chọn phong cách trả lời
     lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
@@ -148,19 +148,35 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
+    # Gộp instruction vào nội dung gửi
+    final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
+
+    # 4️⃣ Gửi đến Gemini (retry tối đa 3 lần)
     for attempt in range(3):
-        # Xóa user entry lỗi từ lần trước (nếu có)
+        # Dọn dẹp input cũ nếu lần trước lỗi
         if history and history[-1]["role"] == "user":
             history.pop()
 
-        history.append({"role": "user", "content": user_input_to_use})
+        # Thêm input mới
+        history.append({"role": "user", "content": final_input_content})
 
         try:
+            # ✂️ Cắt gọn lịch sử
             trimmed_history = history[-HISTORY_LIMIT:]
 
+            # 🧱 Chuyển sang định dạng hợp lệ cho SDK 1.47.0
+            structured_history = [
+                {
+                    "role": msg["role"],
+                    "parts": [{"text": msg["content"]}]
+                }
+                for msg in trimmed_history
+            ]
+
+            # 🚀 Gọi Gemini API
             response = await asyncio.to_thread(lambda: client.models.generate_content(
                 model=MODEL_NAME,
-                contents=trimmed_history,
+                contents=structured_history,
                 temperature=0.8
             ))
 
@@ -168,26 +184,38 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
             if not answer:
                 answer = "Phoebe hơi ngơ ngác chút... anh hỏi lại được không nè? (・・;)"
 
+            # ✅ Lưu phản hồi vào lịch sử
             history.append({"role": "model", "content": answer})
             session["message_count"] += 1
             save_sessions()
             return answer
+
+        except ValidationError as e:
+            print(f"❌ ValidationError: {e}")
+            if history and history[-1]["role"] == "user":
+                history.pop()
+            if attempt < 2:
+                await asyncio.sleep(2)
+                continue
+            return "⚠️ Gemini bảo nội dung này không hợp lệ... anh thử gõ lại dịu dàng hơn nha~"
 
         except APIError as e:
             print(f"❌ APIError: {e}")
             if attempt < 2:
                 await asyncio.sleep(2)
                 continue
-            err_msg = str(e)
-            return f"⚠️ Gemini gặp sự cố: {err_msg[:60]}..."
+            return f"⚠️ Gemini gặp sự cố: {e.message[:60]}..."
 
         except Exception as e:
             print(f"❌ Lỗi khác: {type(e).__name__} - {e}")
+            if history and history[-1]["role"] == "user":
+                history.pop()
             if attempt < 2:
                 await asyncio.sleep(2)
                 continue
             return f"⚠️ Gemini đang lỗi: {type(e).__name__}"
 
+    # 5️⃣ Nếu tất cả thất bại
     return "⚠️ Gemini không phản hồi, thử lại sau nhé!"
 
 # ========== STATUS ==========
@@ -243,8 +271,11 @@ async def delete_conv(interaction: discord.Interaction):
         msg = "Trí nhớ của em trống trơn rồi mà~ 🥺"
     await interaction.response.send_message(msg, ephemeral=True)
 
-# 🛡️ Admin-only Flirt Mode
-@tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt Mode (Admin-only)")
+@tree.command(
+    name="chat18plus",
+    description="🔞 Bật/tắt Flirt Mode (Admin-only)",
+    default_permissions=discord.Permissions(manage_guild=True)  # 🔒 Chỉ admin có thể thấy & dùng
+)
 async def chat18plus(interaction: discord.Interaction, enable: bool):
     if not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message(
@@ -256,14 +287,15 @@ async def chat18plus(interaction: discord.Interaction, enable: bool):
     global flirt_enable
     flirt_enable = enable
     status = "BẬT" if enable else "TẮT"
-    
-    # Cập nhật trạng thái bot
+
+    # 🩷 Cập nhật trạng thái hiển thị
     new_activity = discord.Game(f"💞 Flirt Mode {status}")
     await interaction.client.change_presence(activity=new_activity)
 
     await interaction.response.send_message(
-        f"🔞 Flirt Mode **{status}** cho **toàn bộ bot**. Phoebe sẽ trở nên {'ngọt ngào hơn~ 💖' if enable else 'hiền lành trở lại~ 🌸'}",
-        ephemeral=False
+        f"🔞 Flirt Mode **{status}** cho **toàn bộ bot**.\n"
+        f"Phoebe sẽ trở nên {'ngọt ngào hơn~ 💖' if enable else 'hiền lành trở lại~ 🌸'}",
+        ephemeral=True
     )
 
 # ========== FLASK ==========
