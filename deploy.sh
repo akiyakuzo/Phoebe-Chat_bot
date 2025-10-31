@@ -16,10 +16,14 @@ echo "🔄 Upgrading pip, setuptools, wheel..."
 echo "📦 Installing dependencies..."
 "$PYTHON_BIN" -m pip install --upgrade -r requirements.txt
 
-# ==== 4. Kiểm tra version google-generativeai ====
+# ==== 4. Xoá cache cũ (Render đôi khi còn giữ các module cũ) ====
+echo "🧹 Clearing pip cache..."
+"$PYTHON_BIN" -m pip cache purge || true
+
+# ==== 5. Kiểm tra version google-generativeai ====
 echo "🔍 Checking google-generativeai version..."
 "$PYTHON_BIN" -c "import google.generativeai as genai; print('Google GenerativeAI version:', genai.__version__)"
 
-# ==== 5. Chạy bot ====
+# ==== 6. Chạy bot ====
 echo "💫 Starting Phoebe..."
-"$PYTHON_BIN" chatbot.py
+exec "$PYTHON_BIN" chatbot.py
