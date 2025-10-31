@@ -13,20 +13,18 @@ from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 from datetime import datetime
-
-# ========== GOOGLE GENERATIVE AI (Gemini 2.0 Flash) ==========
 import google.generativeai as genai
-# ĐÃ XÓA: from google.generativeai.errors import APIError (Để tương thích 0.3.0)
 
+# ========== CONFIG GOOGLE GENERATIVE AI (Gemini 2.0 Flash) ==========
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
-# Khởi tạo Client
-client = genai.Client(api_key=GEMINI_API_KEY)
+# ✅ Chuẩn SDK 0.3.0
+genai.configure(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-2.5-flash"
 
-# ========== CONFIG ==========
+# ========== CONFIG BOT ==========
 BOT_NAME = "Fibi Béll 💖"
 TOKEN = os.getenv("TOKEN")
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
@@ -35,7 +33,7 @@ SESSIONS_FILE = "sessions.json"
 flirt_enable = False
 active_chats = {}
 
-# ========== STYLE INSTRUCTIONS ==========
+# ========== STYLE INSTRUCTIONS (Giữ nguyên) ==========
 PHOBE_SAFE_INSTRUCTION = (
     "✨ Trả lời thân mật, tự nhiên, dễ thương. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
@@ -59,7 +57,7 @@ PHOBE_COMFORT_INSTRUCTION = (
     "Tối đa 120 từ."
 )
 
-# ========== PROMPTS ==========
+# ========== PROMPTS (Giữ nguyên) ==========
 PHOBE_BASE_PROMPT = """
 Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 
@@ -114,20 +112,21 @@ def get_or_create_chat(user_id):
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI (TỐI ƯU XỬ LÝ LỖI & generate_content) ==========
-async def ask_gemini(user_id: str, user_input: str) -> str:
+# ========== ASK GEMINI (STREAMING) ==========
+async def ask_gemini_stream(user_id: str, user_input: str):
     session = get_or_create_chat(user_id)
     history = session["history"]
 
     user_input = user_input.strip()
     if not user_input:
-        return "⚠️ Không nhận được câu hỏi, anh thử lại nhé!"
+        yield "⚠️ Không nhận được câu hỏi, anh thử lại nhé!"
+        return
 
     user_input_cleaned = user_input.encode("utf-8", errors="ignore").decode()
     if not user_input_cleaned:
-        return "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
+        yield "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
+        return
 
-    # 🌟 Reset History nếu quá dài
     if len(history) > HISTORY_LIMIT + 2:
         print(f"⚠️ Reset history user {user_id}")
         last_message = user_input_cleaned
@@ -137,7 +136,6 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         user_input_to_use = user_input_cleaned
 
-    # 🎭 Chọn instruction
     lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
@@ -146,44 +144,38 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    # Gộp Instruction vào Input cuối cùng 
     final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
-    
-    # 💬 Chuẩn bị lịch sử gửi cho Gemini
     contents_to_send = history + [{"role": "user", "content": final_input_content}]
+    full_answer = ""
 
-    answer = ""
-    for attempt in range(3):
-        try:
-            response = await asyncio.to_thread(
-                lambda: client.models.generate_content(
-                    model=MODEL_NAME,
-                    contents=contents_to_send,
-                    temperature=0.8
-                )
+    try:
+        # ✅ DÙNG generate_content_stream CHUẨN SDK 0.3.0
+        response_stream = await asyncio.to_thread(
+            lambda: genai.models.generate_content_stream(
+                model=MODEL_NAME,
+                contents=contents_to_send,
+                temperature=0.8
             )
-            answer = response.text.strip()
-            if answer:
-                break
-        # ✅ CHỈ DÙNG EXCEPT EXCEPTION ĐỂ BẮT MỌI LỖI (APIError, GoogleAPIError,...)
-        except Exception as e:
-            print(f"❌ Lỗi Gemini: {type(e).__name__} - {e}, thử lại {attempt+1}/3")
-            await asyncio.sleep(2 ** attempt)
-            if attempt == 2:
-                # Trả về loại lỗi và 60 ký tự đầu tiên của thông báo lỗi nếu có
-                err_msg = str(e)
-                return f"⚠️ Gemini đang lỗi: {type(e).__name__} - {err_msg[:60]}..."
-    else:
-        answer = "⚠️ Gemini 2.0 Flash không phản hồi, thử lại sau nhé!"
+        )
+        for chunk in response_stream:
+            if chunk.text:
+                text = chunk.text
+                full_answer += text
+                yield text
+                
+    except Exception as e:
+        error_type = type(e).__name__
+        print(f"❌ Lỗi Gemini: {error_type} - {e}")
+        yield f"\n\n⚠️ Gemini đang lỗi: {error_type} - {str(e)[:60]}..."
+        return # Ngừng stream khi có lỗi
 
-    # 💾 Lưu lịch sử (lưu input sạch)
+    # 💾 Lưu lịch sử sau khi stream xong
     history.append({"role": "user", "content": user_input_to_use})
-    history.append({"role": "model", "content": answer})
+    history.append({"role": "model", "content": full_answer}) 
     session["message_count"] += 1
     save_sessions()
-    return answer
 
-# ========== STATUS ==========
+# ========== STATUS LOOP ==========
 status_list = [discord.Status.online, discord.Status.idle, discord.Status.dnd]
 activity_list = [
     discord.Game("💖 Trò chuyện cùng anh"),
@@ -195,21 +187,22 @@ activity_list = [
 async def random_status():
     global flirt_enable
     if flirt_enable:
-         activity = discord.Game("💞 Phoebe Quyến Rũ ON")
+        activity = discord.Game("💞 Phoebe Quyến Rũ ON")
     else:
-         activity = random.choice(activity_list)
+        activity = random.choice(activity_list)
     await bot.change_presence(status=random.choice(status_list), activity=activity)
 
-# ========== SLASH COMMANDS ==========
+# ========== SLASH COMMANDS (Cập nhật cho Streaming) ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
 async def hoi(interaction: discord.Interaction, cauhoi: str):
+    # Trì hoãn phản hồi để có thời gian stream
     await interaction.response.defer(thinking=True)
     user_id = str(interaction.user.id)
-    answer = await ask_gemini(user_id, cauhoi)
-
+    
+    # Khởi tạo embed ban đầu
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
-        description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {answer}",
+        description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** Đang gõ...",
         color=0xFFC0CB
     )
     embed.set_thumbnail(url=random.choice([
@@ -221,7 +214,30 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
         "https://files.catbox.moe/2y17ot.png","https://files.catbox.moe/gg8pt0.jpg",
         "https://files.catbox.moe/jkboop.png"
     ]))
-    await interaction.followup.send(embed=embed)
+    
+    # Gửi tin nhắn ban đầu và lưu tham chiếu
+    response_message = await interaction.followup.send(embed=embed)
+    
+    full_response = ""
+    chunk_count = 0
+    async for chunk in ask_gemini_stream(user_id, cauhoi):
+        full_response += chunk
+        chunk_count += 1
+        
+        # Cập nhật embed sau mỗi 5 chunk hoặc khi hoàn tất chunk đầu tiên
+        if chunk_count % 5 == 0 or chunk_count == 1:
+            # Tránh lỗi Discord max length (2000 ký tự cho tin nhắn thường, 4096 cho embed)
+            display_text = full_response
+            if len(full_response) > 3900:
+                display_text = full_response[:3900] + "..."
+
+            # Cập nhật embed
+            embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {display_text}"
+            await response_message.edit(embed=embed)
+
+    # Gửi kết quả cuối cùng (đã lưu lịch sử)
+    embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {full_response}"
+    await response_message.edit(embed=embed)
 
 @tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
 async def delete_conv(interaction: discord.Interaction):
@@ -269,11 +285,9 @@ async def chat18plus(interaction: discord.Interaction, enable: bool):
 
 # ========== FLASK ==========
 app = Flask(__name__)
-
 @app.route("/")
 def home():
     return "<h3>Phoebe Xinh Đẹp đang hoạt động! 🌸</h3>"
-
 @app.route("/healthz")
 def healthz():
     return {"status": "ok", "message": "Phoebe khỏe mạnh nè~ 💖"}, 200
