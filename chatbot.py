@@ -14,15 +14,16 @@ from flask import Flask
 from threading import Thread
 from datetime import datetime
 
-# ========== GOOGLE GENERATIVE AI (Gemini 2.0 Flash) ==========
+# ========== GOOGLE GENERATIVE AI (Gemini 2.0 / SDK 0.3.0) ==========
 import google.generativeai as genai
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
-client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL_NAME = "gemini-2.5-flash"  # Dùng model mới nhất
+# ==== Lưu ý: SDK 0.3.0 dùng configure, không dùng Client ====
+genai.configure(api_key=GEMINI_API_KEY)
+MODEL_NAME = "gemini-2.5-flash"
 
 # ========== CONFIG ==========
 BOT_NAME = "Fibi Béll 💖"
@@ -105,15 +106,14 @@ def save_sessions():
 
 def get_or_create_chat(user_id):
     if user_id not in active_chats:
-        # Tối ưu hóa 1: Dùng tin nhắn 0 và 1 để lưu System/Persona/Instruction
         initial = [
             {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
-            {"role": "model", "content": "Em đây, anh muốn hỏi gì nè? (* / ω \\ *)"} # Đã sửa câu trả lời để bot có vẻ tự nhiên hơn
+            {"role": "model", "content": "Em đây, anh muốn hỏi gì nè? (* / ω \\ *)"}
         ]
         active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
     return active_chats[user_id]
 
-# ========== ASK GEMINI (TỐI ƯU TOKEN & SDK 0.3.0) ==========
+# ========== ASK GEMINI (SDK 0.3.0) ==========
 async def ask_gemini(user_id: str, user_input: str) -> str:
     session = get_or_create_chat(user_id)
     history = session["history"]
@@ -126,17 +126,16 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     if not user_input_cleaned:
         return "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
 
-    # Reset History nếu quá dài (chỉ giữ lại 2 tin nhắn khởi tạo)
+    # Reset history nếu quá dài
     if len(history) > HISTORY_LIMIT + 2:
-        print(f"⚠️ Reset history user {user_id}")
         last_message = user_input_cleaned
-        session["history"] = history[:2] 
+        session["history"] = history[:2]
         history = session["history"]
         user_input_to_use = last_message
     else:
         user_input_to_use = user_input_cleaned
 
-    # Lựa chọn Instruction
+    # Chọn instruction
     lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
@@ -145,10 +144,9 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
 
-    # Gộp Instruction vào Input cuối cùng
     final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
 
-    # Chỉ gửi các tin nhắn thực tế + tin nhắn mới nhất
+    # Lịch sử gửi Gemini
     trimmed_history_to_send = history[2:] + [{"role": "user", "content": final_input_content}]
     if len(history) <= 2:
         trimmed_history_to_send = history + [{"role": "user", "content": final_input_content}]
@@ -156,7 +154,8 @@ async def ask_gemini(user_id: str, user_input: str) -> str:
     answer = ""
     for attempt in range(3):
         try:
-            response = await asyncio.to_thread(lambda: client.models.generate_content(
+            # SDK 0.3.0: genai.models.generate_content(...)
+            response = await asyncio.to_thread(lambda: genai.models.generate_content(
                 model=MODEL_NAME,
                 contents=trimmed_history_to_send,
                 temperature=0.8
@@ -206,7 +205,6 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {answer}",
         color=0xFFC0CB
     )
-    # Giữ lại các URL hình ảnh mở rộng
     embed.set_thumbnail(url=random.choice([
         "https://files.catbox.moe/2474tj.png","https://files.catbox.moe/66v9vw.jpg",
         "https://files.catbox.moe/ezqs00.jpg","https://files.catbox.moe/yow35q.png",
