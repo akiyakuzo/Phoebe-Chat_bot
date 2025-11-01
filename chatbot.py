@@ -94,8 +94,8 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 async def ask_gemini_stream(user_id: str, user_input: str):
     # Lấy lịch sử trực tiếp từ SQLite
     raw_history = state_manager.get_memory(user_id)
-    
-    # SỬA LỖI KEYERROR TẠI ĐÂY: Chuyển đổi lịch sử sang định dạng Gemini SDK yêu cầu
+
+    # Khắc phục lỗi KeyError cho LỊCH SỬ TỪ SQLITE
     # Format mới: [{'role': 'user/model', 'parts': [{'text': 'content'}]}, ...]
     history = [
         {"role": role, "parts": [{"text": content}]} 
@@ -110,14 +110,14 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     if not user_input_cleaned:
         yield "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
         return
-    
+
     user_input_to_use = user_input_cleaned
 
-    # TẠO PROMPT CỐ ĐỊNH CHO GEMINI (LUÔN GỬI để duy trì vai trò)
+    # SỬA LỖI KEYERROR TẠI ĐÂY: TẠO PROMPT CỐ ĐỊNH PHÙ HỢP VỚI SDK MỚI
     initial_prompt = [
-        # Prompt khởi tạo vẫn dùng format cũ (role/content) vì nó nằm ngoài mảng history
-        {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
-        {"role": "model", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
+        # Phải dùng format parts cho tất cả Content objects
+        {"role": "user", "parts": [{"text": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"}]},
+        {"role": "model", "parts": [{"text": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}]}
     ]
 
     # Xác định instruction dựa trên nội dung
@@ -130,11 +130,12 @@ async def ask_gemini_stream(user_id: str, user_input: str):
         instruction = PHOBE_SAFE_INSTRUCTION
 
     final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
-    
-    # GỬI PROMPT CỐ ĐỊNH + LỊCH SỬ TỪ SQLITE (đã sửa format) + TIN NHẮN MỚI (format content)
-    # Lưu ý: Tin nhắn cuối cùng (final_input_content) vẫn được truyền dưới dạng 'content'
-    # vì nó là tin nhắn *đầu tiên* trong phiên mới, và SDK xử lý nó khác với lịch sử.
-    contents_to_send = initial_prompt + history + [{"role": "user", "content": final_input_content}]
+
+    # SỬA LỖI KEYERROR TẠI ĐÂY: Tin nhắn cuối cùng cũng phải dùng format parts
+    new_user_message = {"role": "user", "parts": [{"text": final_input_content}]}
+
+    # GỬI PROMPT CỐ ĐỊNH (đã sửa) + LỊCH SỬ (đã sửa) + TIN NHẮN MỚI (đã sửa)
+    contents_to_send = initial_prompt + history + [new_user_message]
     full_answer = ""
 
     # KHỐI TRY/EXCEPT SỐ 1: Bắt lỗi Gemini API
@@ -260,7 +261,7 @@ async def delete_conv(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     # GỌI HÀM CLEAR TỪ STATE MANAGER (SQLITE)
     state_manager.clear_memory(user_id)
-    
+
     msg = "🧹 Phoebe đã dọn sạch trí nhớ, sẵn sàng nói chuyện lại nè~ 💖"
     await interaction.response.send_message(msg, ephemeral=True)
 
