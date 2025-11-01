@@ -103,12 +103,33 @@ def save_sessions():
         json.dump(active_chats, f, ensure_ascii=False, indent=2)
 
 def get_or_create_chat(user_id):
+    # Định nghĩa cấu trúc khởi tạo an toàn (initial)
+    initial_history = [
+        {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
+        {"role": "model", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
+    ]
+    initial_session_data = {
+        "history": initial_history, 
+        "message_count": 0, 
+        "created_at": str(datetime.now())
+    }
+
+    # Kịch bản 1: User chưa có trong active_chats -> Tạo mới
     if user_id not in active_chats:
-        initial = [
-            {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
-            {"role": "model", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
-        ]
-        active_chats[user_id] = {"history": initial, "message_count": 0, "created_at": str(datetime.now())}
+        active_chats[user_id] = initial_session_data
+    else:
+        # Kịch bản 2: User có nhưng session có thể bị hỏng (thiếu key)
+        session = active_chats[user_id]
+        if "history" not in session or not isinstance(session.get("history"), list):
+            # Nếu thiếu history hoặc history không phải là list, buộc reset
+            print(f"⚠️ Cảnh báo: Session của user {user_id} bị thiếu/lỗi key 'history', đang reset...")
+            active_chats[user_id] = initial_session_data
+        elif "message_count" not in session:
+            # Nếu thiếu message_count, reset để đảm bảo tính toàn vẹn
+            print(f"⚠️ Cảnh báo: Session của user {user_id} bị thiếu key 'message_count', đang reset...")
+            active_chats[user_id] = initial_session_data
+
+    # Luôn trả về session đã được đảm bảo là có đủ key
     return active_chats[user_id]
 
 # ========== ASK GEMINI STREAM ==========
