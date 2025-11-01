@@ -90,12 +90,10 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
-# ========== ASK GEMINI STREAM (Phiên bản SQLite) ==========
+# ========== ASK GEMINI STREAM (Phiên bản Ghi Lỗi Chi Tiết) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     # Lấy lịch sử trực tiếp từ SQLite
     raw_history = state_manager.get_memory(user_id)
-    
-    # Chuyển đổi lịch sử sang định dạng dictionary cho Gemini
     history = [{"role": role, "content": content} for role, content in raw_history]
 
     user_input = user_input.strip()
@@ -130,8 +128,8 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     contents_to_send = initial_prompt + history + [{"role": "user", "content": final_input_content}]
     full_answer = ""
 
+    # KHỐI TRY/EXCEPT SỐ 1: Bắt lỗi Gemini API
     try:
-        # GỌI API CHUẨN SDK 0.8.0
         response_stream = await asyncio.to_thread(
             lambda: gemini_model.generate_content(
                 contents=contents_to_send,
@@ -145,8 +143,21 @@ async def ask_gemini_stream(user_id: str, user_input: str):
                 full_answer += text
                 yield text
     except Exception as e:
+        # Ghi lỗi API cụ thể ra console để kiểm tra trên Render Log
+        print(f"🚨 LỖI GEMINI API CHO USER {user_id}: {type(e).__name__}: {e}")
         yield f"\n⚠️ LỖI KỸ THUẬT: {type(e).__name__}"
         return
+    
+    # KHỐI TRY/EXCEPT SỐ 2: Bắt lỗi SQLite (ít khả năng)
+    try:
+        # LƯU TIN NHẮN MỚI VÀO SQLITE
+        state_manager.add_message(user_id, "user", user_input_cleaned)
+        state_manager.add_message(user_id, "model", full_answer)
+    except Exception as e:
+        # Ghi lỗi SQLite cụ thể ra console
+        print(f"🚨 LỖI SQLITE CHO USER {user_id}: {type(e).__name__}: {e}")
+        # Không cần yield, chỉ ghi log vì phản hồi đã gửi xong
+
 
     # LƯU TIN NHẮN MỚI VÀO SQLITE
     state_manager.add_message(user_id, "user", user_input_cleaned)
