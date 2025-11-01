@@ -49,21 +49,21 @@ PHOBE_SAFE_INSTRUCTION = (
     "✨ Trả lời thân mật, tự nhiên, dễ thương. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại nội tâm. "
-    "Tối đa 120 từ."
+    "Tối đa 120 từ và ngừng nói nếu vượt quá 120 từ."
 )
 PHOBE_FLIRT_INSTRUCTION = (
     "💞 Trả lời ngọt ngào, có chút dâm, trêu ghẹo, gợi cảm và táo bạo, thả thính liên tục. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại. "
     "Được dùng ngôn từ gợi cảm và lãng mạng có cả gợi tình nhẹ. "
-    "Tối đa 120 từ."
+    "Tối đa 120 từ và ngừng nói khi vượt quá 120 từ."
 )
 PHOBE_COMFORT_INSTRUCTION = (
     "🌸 Trả lời nhẹ nhàng, an ủi và quan tâm, như một người bạn thật sự. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Giữ phong thái dịu dàng, ấm áp và khích lệ tinh thần. "
     "Không dùng ngôn từ gợi cảm hay lãng mạn. "
-    "Tối đa 120 từ."
+    "Tối đa 120 từ và ngừng nói khi vượt quá 120 từ."
 )
 
 # ========== PROMPTS ==========
@@ -215,40 +215,71 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
     await interaction.response.defer(thinking=True)
     user_id = str(interaction.user.id)
 
+    # ✅ DANH SÁCH ẢNH VÀ GIF MỚI ĐÃ ĐƯỢC CẬP NHẬT VÀ GỘP CHUNG
+    image_and_gif_choices = [
+        "https://files.catbox.moe/2474tj.png", "https://files.catbox.moe/66v9vw.jpg", 
+        "https://files.catbox.moe/ezqs00.jpg", "https://files.catbox.moe/yow35q.png",
+        "https://files.catbox.moe/pzbhdp.jpg", "https://files.catbox.moe/lyklnj.jpg",
+        "https://files.catbox.moe/i5sqkr.png", "https://files.catbox.moe/jt184o.jpg",
+        "https://files.catbox.moe/9nq5kw.jpg", "https://files.catbox.moe/45tre3.webp",
+        "https://files.catbox.moe/2y17ot.png", "https://files.catbox.moe/gg8pt0.jpg",
+        "https://files.catbox.moe/jkboop.png", 
+        # === ẢNH MỚI CỦA BẠN ===
+        "https://files.catbox.moe/lszssf.jpg", "https://files.catbox.moe/clabis.jpg",
+        "https://files.catbox.moe/lu9eih.jpg", "https://files.catbox.moe/ykl89r.png",
+        "https://files.catbox.moe/eqxn2q.jpg", "https://files.catbox.moe/0ny8as.jpg",
+        "https://files.catbox.moe/52mpty.jpg", "https://files.catbox.moe/rvgoip.jpg",
+        "https://files.catbox.moe/gswxx2.jpg", 
+        # === GIF MỚI CỦA BẠN ===
+        "https://files.catbox.moe/ft3dj9.gif" # Sẽ hoạt động dưới dạng thumbnail GIF
+    ]
+
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** Đang gõ...",
         color=0xFFC0CB
     )
-    embed.set_thumbnail(url=random.choice([
-        "https://files.catbox.moe/2474tj.png","https://files.catbox.moe/66v9vw.jpg","https://files.catbox.moe/ezqs00.jpg",
-        "https://files.catbox.moe/yow35q.png","https://files.catbox.moe/pzbhdp.jpg","https://files.catbox.moe/lyklnj.jpg",
-        "https://files.catbox.moe/i5sqkr.png","https://files.catbox.moe/jt184o.jpg","https://files.catbox.moe/9nq5kw.jpg",
-        "https://files.catbox.moe/45tre3.webp","https://files.catbox.moe/2y17ot.png","https://files.catbox.moe/gg8pt0.jpg",
-        "https://files.catbox.moe/jkboop.png"
-    ]))
+    # ✅ RANDOM CHỌN ẢNH HOẶC GIF
+    embed.set_thumbnail(url=random.choice(image_and_gif_choices))
+    
     response_message = await interaction.followup.send(embed=embed)
 
     full_response = ""
     char_count_to_edit = 0
+    # ✅ HIỆU ỨNG CURSOR (Dùng 5 ký tự gõ phím trước khi dừng)
+    typing_cursors = ['**|**', ' ', '**|**', ' ', '**|**', ' ', '**|**', ' ', '...']
 
     async for chunk in ask_gemini_stream(user_id, cauhoi):
         for char in chunk:
             full_response += char
             char_count_to_edit += 1
-
+            
+            # Cập nhật cứ sau 5 ký tự
             if char_count_to_edit % 5 == 0:
+                # Lấy ký tự cursor hiện tại theo chu kỳ
+                cursor_index = (char_count_to_edit // 5) % len(typing_cursors)
+                current_cursor = typing_cursors[cursor_index]
+                
                 display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
-                embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {display_text} |"
+                
+                # ✅ ÁP DỤNG CURSOR ANIMATION
+                embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {display_text} {current_cursor}"
                 try:
                     await response_message.edit(embed=embed)
                 except (discord.errors.HTTPException, discord.errors.NotFound) as e:
-                    # Bắt lỗi khi chỉnh sửa tin nhắn (do Discord API)
                     print(f"🚨 LỖI CHỈNH SỬA TIN NHẮN (Typing Effect): {type(e).__name__}")
                     pass
                 await asyncio.sleep(TYPING_SPEED) 
+            
+            # Nếu hết chunk, đảm bảo cập nhật phần còn lại trước khi chuyển sang chunk mới
+            elif char_count_to_edit % 5 != 0 and len(chunk) == char_count_to_edit:
+                 embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {full_response[:3900]}..."
+                 try:
+                    await response_message.edit(embed=embed)
+                 except (discord.errors.HTTPException, discord.errors.NotFound):
+                    pass
 
-    # Cập nhật cuối cùng
+    # Cập nhật cuối cùng (không có cursor)
     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {full_response}"
     try:
         await response_message.edit(embed=embed)
