@@ -241,14 +241,18 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
                 embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {display_text} |"
                 try:
                     await response_message.edit(embed=embed)
-                except discord.errors.HTTPException:
+                except (discord.errors.HTTPException, discord.errors.NotFound) as e:
+                    # Bắt lỗi khi chỉnh sửa tin nhắn (do Discord API)
+                    print(f"🚨 LỖI CHỈNH SỬA TIN NHẮN (Typing Effect): {type(e).__name__}")
                     pass
                 await asyncio.sleep(TYPING_SPEED) 
 
+    # Cập nhật cuối cùng
     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {full_response}"
     try:
         await response_message.edit(embed=embed)
-    except discord.errors.HTTPException:
+    except (discord.errors.HTTPException, discord.errors.NotFound) as e:
+        print(f"🚨 LỖI CHỈNH SỬA CUỐI CÙNG: {type(e).__name__}")
         pass
 
 @tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
