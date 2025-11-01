@@ -4,7 +4,6 @@ sys.modules['audioop'] = types.ModuleType('audioop')
 
 # ========== IMPORTS ==========
 import os
-import json
 import random
 import asyncio
 import discord
@@ -15,17 +14,24 @@ from threading import Thread
 from datetime import datetime
 import google.generativeai as genai
 
-# ========== CONFIG GOOGLE GENERATIVE AI (Gemini 2.0 Flash) ==========
+# TÍCH HỢP STATE MANAGER (SQLITE)
+try:
+    from state_manager import StateManager
+    state_manager = StateManager()
+except ImportError:
+    # Báo lỗi rõ ràng nếu thiếu file state_manager
+    raise ImportError("⚠️ LỖI: Không tìm thấy file state_manager.py. Vui lòng kiểm tra lại cấu trúc repo.")
+
+# ========== CONFIG GOOGLE GENERATIVE AI (Đã sửa lỗi SDK) ==========
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
 
-MODEL_NAME = "gemini-2.0-flash" # Phải khai báo model name TRƯỚC
+MODEL_NAME = "gemini-2.0-flash" 
 
 try:
     # ✅ KHỞI TẠO CHUẨN SDK 0.8.0
     genai.configure(api_key=GEMINI_API_KEY)
-    # Tạo một đối tượng model toàn cục
     gemini_model = genai.GenerativeModel(MODEL_NAME) 
 except Exception as e:
     raise RuntimeError(f"Lỗi khởi tạo Gemini: {e}")
@@ -34,10 +40,8 @@ except Exception as e:
 BOT_NAME = "Fibi Béll 💖"
 TOKEN = os.getenv("TOKEN")
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
-HISTORY_LIMIT = 20
-SESSIONS_FILE = "sessions.json"
+# ĐÃ LOẠI BỎ active_chats, SESSIONS_FILE, HISTORY_LIMIT cũ
 flirt_enable = False
-active_chats = {}
 TYPING_SPEED = 0.01
 
 # ========== STYLE INSTRUCTIONS ==========
@@ -86,56 +90,14 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
-# ========== SESSION SYSTEM ==========
-def load_sessions():
-    global active_chats
-    if os.path.exists(SESSIONS_FILE):
-        try:
-            with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
-                active_chats = json.load(f)
-        except:
-            active_chats = {}
-    else:
-        active_chats = {}
-
-def save_sessions():
-    with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
-        json.dump(active_chats, f, ensure_ascii=False, indent=2)
-
-def get_or_create_chat(user_id):
-    # Định nghĩa cấu trúc khởi tạo an toàn (initial)
-    initial_history = [
-        {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
-        {"role": "model", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
-    ]
-    initial_session_data = {
-        "history": initial_history, 
-        "message_count": 0, 
-        "created_at": str(datetime.now())
-    }
-
-    # Kịch bản 1: User chưa có trong active_chats -> Tạo mới
-    if user_id not in active_chats:
-        active_chats[user_id] = initial_session_data
-    else:
-        # Kịch bản 2: User có nhưng session có thể bị hỏng (thiếu key)
-        session = active_chats[user_id]
-        if "history" not in session or not isinstance(session.get("history"), list):
-            # Nếu thiếu history hoặc history không phải là list, buộc reset
-            print(f"⚠️ Cảnh báo: Session của user {user_id} bị thiếu/lỗi key 'history', đang reset...")
-            active_chats[user_id] = initial_session_data
-        elif "message_count" not in session:
-            # Nếu thiếu message_count, reset để đảm bảo tính toàn vẹn
-            print(f"⚠️ Cảnh báo: Session của user {user_id} bị thiếu key 'message_count', đang reset...")
-            active_chats[user_id] = initial_session_data
-
-    # Luôn trả về session đã được đảm bảo là có đủ key
-    return active_chats[user_id]
-
-# ========== ASK GEMINI STREAM ==========
+# ========== ASK GEMINI STREAM (Phiên bản SQLite) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
-    session = get_or_create_chat(user_id)
-    history = session["history"]
+    # Lấy lịch sử trực tiếp từ SQLite
+    raw_history = state_manager.get_memory(user_id)
+    
+    # Chuyển đổi lịch sử sang định dạng dictionary cho Gemini
+    history = [{"role": role, "content": content} for role, content in raw_history]
+
     user_input = user_input.strip()
     if not user_input:
         yield "⚠️ Không nhận được câu hỏi, anh thử lại nhé!"
@@ -144,14 +106,16 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     if not user_input_cleaned:
         yield "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
         return
-    if len(history) > HISTORY_LIMIT + 2:
-        last_message = user_input_cleaned
-        session["history"] = history[:2]
-        history = session["history"]
-        user_input_to_use = last_message
-    else:
-        user_input_to_use = user_input_cleaned
+    
+    user_input_to_use = user_input_cleaned
 
+    # TẠO PROMPT CỐ ĐỊNH CHO GEMINI (LUÔN GỬI để duy trì vai trò)
+    initial_prompt = [
+        {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
+        {"role": "model", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
+    ]
+
+    # Xác định instruction dựa trên nội dung
     lower_input = user_input_to_use.lower()
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
@@ -161,16 +125,18 @@ async def ask_gemini_stream(user_id: str, user_input: str):
         instruction = PHOBE_SAFE_INSTRUCTION
 
     final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
-    contents_to_send = history + [{"role": "user", "content": final_input_content}]
+    
+    # GỬI PROMPT CỐ ĐỊNH + LỊCH SỬ TỪ SQLITE + TIN NHẮN MỚI
+    contents_to_send = initial_prompt + history + [{"role": "user", "content": final_input_content}]
     full_answer = ""
 
     try:
-        # ✅ GỌI API CHUẨN SDK 0.8.0
+        # GỌI API CHUẨN SDK 0.8.0
         response_stream = await asyncio.to_thread(
-            lambda: gemini_model.generate_content( # Sửa tên hàm
+            lambda: gemini_model.generate_content(
                 contents=contents_to_send,
-                stream=True, # Thêm stream=True
-                generation_config=genai.GenerationConfig(temperature=0.8) # Sửa cách truyền config
+                stream=True,
+                generation_config=genai.GenerationConfig(temperature=0.8)
             )
         )
         for chunk in response_stream:
@@ -182,18 +148,17 @@ async def ask_gemini_stream(user_id: str, user_input: str):
         yield f"\n⚠️ LỖI KỸ THUẬT: {type(e).__name__}"
         return
 
-    history.append({"role": "user", "content": user_input_to_use})
-    history.append({"role": "model", "content": full_answer})
-    session["message_count"] += 1
-    save_sessions()
+    # LƯU TIN NHẮN MỚI VÀO SQLITE
+    state_manager.add_message(user_id, "user", user_input_cleaned)
+    state_manager.add_message(user_id, "model", full_answer)
 
-# ========== DISCORD CONFIG ==========
+# ========== DISCORD CONFIG (Giữ nguyên) ==========
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# ========== BOT STATUS ==========
+# ========== BOT STATUS (Giữ nguyên) ==========
 status_list = [discord.Status.online, discord.Status.idle, discord.Status.dnd]
 activity_list = [
     discord.Game("💖 Trò chuyện cùng anh"),
@@ -210,7 +175,7 @@ async def random_status():
         activity = random.choice(activity_list)
     await bot.change_presence(status=random.choice(status_list), activity=activity)
 
-# ========== FLASK SERVER ==========
+# ========== FLASK SERVER (Giữ nguyên) ==========
 app = Flask(__name__)
 
 @app.route("/")
@@ -228,7 +193,7 @@ def keep_alive():
     thread = Thread(target=run_flask, daemon=True)
     thread.start()
 
-# ========== SLASH COMMANDS (Đã khôi phục Typing Effect) ==========
+# ========== SLASH COMMANDS ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
 @app_commands.describe(cauhoi="Nhập câu hỏi của bạn")
 async def hoi(interaction: discord.Interaction, cauhoi: str):
@@ -251,19 +216,19 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
 
     full_response = ""
     char_count_to_edit = 0
-    
+
     async for chunk in ask_gemini_stream(user_id, cauhoi):
         for char in chunk:
             full_response += char
             char_count_to_edit += 1
-            
+
             if char_count_to_edit % 5 == 0:
                 display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
                 embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {display_text} |"
                 try:
                     await response_message.edit(embed=embed)
                 except discord.errors.HTTPException:
-                    pass # Bỏ qua lỗi nếu Discord API bị rate limit
+                    pass
                 await asyncio.sleep(TYPING_SPEED) 
 
     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {full_response}"
@@ -275,12 +240,10 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
 @tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
 async def delete_conv(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
-    if user_id in active_chats:
-        del active_chats[user_id]
-        save_sessions()
-        msg = "🧹 Phoebe đã dọn sạch trí nhớ, sẵn sàng nói chuyện lại nè~ 💖"
-    else:
-        msg = "Trí nhớ của em trống trơn rồi mà~ 🥺"
+    # GỌI HÀM CLEAR TỪ STATE MANAGER (SQLITE)
+    state_manager.clear_memory(user_id)
+    
+    msg = "🧹 Phoebe đã dọn sạch trí nhớ, sẵn sàng nói chuyện lại nè~ 💖"
     await interaction.response.send_message(msg, ephemeral=True)
 
 @tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt Mode (chỉ Admin có quyền)")
@@ -295,9 +258,9 @@ async def chat18plus(interaction: discord.Interaction, enable: bool):
 # ========== BOT EVENTS ==========
 @bot.event
 async def on_ready():
+    # Kiểm tra phiên bản SDK
     print("⚡ Gemini SDK version:", genai.__version__)
     print(f"✅ {BOT_NAME} đã sẵn sàng! Logged in as {bot.user}")
-    load_sessions()
     random_status.start()
     if GUILD_ID:
         await tree.sync(guild=discord.Object(GUILD_ID))
