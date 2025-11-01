@@ -90,7 +90,7 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
-# ========== ASK GEMINI STREAM (Phiên bản Ghi Lỗi Chi Tiết) ==========
+# ========== ASK GEMINI STREAM (Phiên bản Đã Sửa Lỗi Lặp + Ghi Lỗi Chi Tiết) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     # Lấy lịch sử trực tiếp từ SQLite
     raw_history = state_manager.get_memory(user_id)
@@ -104,7 +104,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     if not user_input_cleaned:
         yield "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
         return
-    
+
     user_input_to_use = user_input_cleaned
 
     # TẠO PROMPT CỐ ĐỊNH CHO GEMINI (LUÔN GỬI để duy trì vai trò)
@@ -123,7 +123,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
         instruction = PHOBE_SAFE_INSTRUCTION
 
     final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
-    
+
     # GỬI PROMPT CỐ ĐỊNH + LỊCH SỬ TỪ SQLITE + TIN NHẮN MỚI
     contents_to_send = initial_prompt + history + [{"role": "user", "content": final_input_content}]
     full_answer = ""
@@ -147,21 +147,15 @@ async def ask_gemini_stream(user_id: str, user_input: str):
         print(f"🚨 LỖI GEMINI API CHO USER {user_id}: {type(e).__name__}: {e}")
         yield f"\n⚠️ LỖI KỸ THUẬT: {type(e).__name__}"
         return
-    
-    # KHỐI TRY/EXCEPT SỐ 2: Bắt lỗi SQLite (ít khả năng)
+
+    # KHỐI TRY/EXCEPT SỐ 2: LƯU TIN NHẮN VÀO SQLITE
     try:
-        # LƯU TIN NHẮN MỚI VÀO SQLITE
         state_manager.add_message(user_id, "user", user_input_cleaned)
         state_manager.add_message(user_id, "model", full_answer)
     except Exception as e:
         # Ghi lỗi SQLite cụ thể ra console
         print(f"🚨 LỖI SQLITE CHO USER {user_id}: {type(e).__name__}: {e}")
-        # Không cần yield, chỉ ghi log vì phản hồi đã gửi xong
-
-
-    # LƯU TIN NHẮN MỚI VÀO SQLITE
-    state_manager.add_message(user_id, "user", user_input_cleaned)
-    state_manager.add_message(user_id, "model", full_answer)
+        # Không cần yield, chỉ ghi log.
 
 # ========== DISCORD CONFIG (Giữ nguyên) ==========
 intents = discord.Intents.default()
