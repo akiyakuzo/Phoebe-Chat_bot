@@ -90,11 +90,17 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
-# ========== ASK GEMINI STREAM (Phiên bản Đã Sửa Lỗi Lặp + Ghi Lỗi Chi Tiết) ==========
+# ========== ASK GEMINI STREAM (Phiên bản Sửa Lỗi Format API) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     # Lấy lịch sử trực tiếp từ SQLite
     raw_history = state_manager.get_memory(user_id)
-    history = [{"role": role, "content": content} for role, content in raw_history]
+    
+    # SỬA LỖI KEYERROR TẠI ĐÂY: Chuyển đổi lịch sử sang định dạng Gemini SDK yêu cầu
+    # Format mới: [{'role': 'user/model', 'parts': [{'text': 'content'}]}, ...]
+    history = [
+        {"role": role, "parts": [{"text": content}]} 
+        for role, content in raw_history
+    ]
 
     user_input = user_input.strip()
     if not user_input:
@@ -104,11 +110,12 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     if not user_input_cleaned:
         yield "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
         return
-
+    
     user_input_to_use = user_input_cleaned
 
     # TẠO PROMPT CỐ ĐỊNH CHO GEMINI (LUÔN GỬI để duy trì vai trò)
     initial_prompt = [
+        # Prompt khởi tạo vẫn dùng format cũ (role/content) vì nó nằm ngoài mảng history
         {"role": "user", "content": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"},
         {"role": "model", "content": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}
     ]
@@ -123,8 +130,10 @@ async def ask_gemini_stream(user_id: str, user_input: str):
         instruction = PHOBE_SAFE_INSTRUCTION
 
     final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
-
-    # GỬI PROMPT CỐ ĐỊNH + LỊCH SỬ TỪ SQLITE + TIN NHẮN MỚI
+    
+    # GỬI PROMPT CỐ ĐỊNH + LỊCH SỬ TỪ SQLITE (đã sửa format) + TIN NHẮN MỚI (format content)
+    # Lưu ý: Tin nhắn cuối cùng (final_input_content) vẫn được truyền dưới dạng 'content'
+    # vì nó là tin nhắn *đầu tiên* trong phiên mới, và SDK xử lý nó khác với lịch sử.
     contents_to_send = initial_prompt + history + [{"role": "user", "content": final_input_content}]
     full_answer = ""
 
@@ -143,7 +152,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
                 full_answer += text
                 yield text
     except Exception as e:
-        # Ghi lỗi API cụ thể ra console để kiểm tra trên Render Log
+        # Ghi lỗi API cụ thể ra console
         print(f"🚨 LỖI GEMINI API CHO USER {user_id}: {type(e).__name__}: {e}")
         yield f"\n⚠️ LỖI KỸ THUẬT: {type(e).__name__}"
         return
