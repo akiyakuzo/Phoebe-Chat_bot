@@ -249,7 +249,7 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
 
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
-        description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** Đang gõ...",
+        description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** Đang nói...",
         color=0xFFC0CB
     )
     embed.set_thumbnail(url=random.choice(image_and_gif_choices))
@@ -273,7 +273,7 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
                 # Tránh vượt giới hạn 4096 ký tự của Embed
                 display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
 
-                embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {display_text} {current_cursor}"
+                embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {display_text} {current_cursor}"
                 try:
                     await response_message.edit(embed=embed)
                 except (discord.errors.HTTPException, discord.errors.NotFound) as e:
@@ -284,7 +284,7 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
             # Đã loại bỏ khối elif sai logic ở đây.
 
     # Cập nhật cuối cùng (không có cursor)
-    embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {full_response}"
+    embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {full_response}"
     try:
         await response_message.edit(embed=embed)
     except (discord.errors.HTTPException, discord.errors.NotFound) as e:
