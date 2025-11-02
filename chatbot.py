@@ -30,7 +30,7 @@ if not GEMINI_API_KEY:
 MODEL_NAME = "gemini-2.0-flash" 
 
 try:
-    # ✅ KHỞI TẠO CHUẨN SDK 0.8.0
+    # ✅ KHỞI TẠO CHUẨN SDK 0.8.0+
     genai.configure(api_key=GEMINI_API_KEY)
     gemini_model = genai.GenerativeModel(MODEL_NAME) 
 except Exception as e:
@@ -89,7 +89,7 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
-# ========== ASK GEMINI STREAM (ĐÃ SỬA LỖI RUNTIME .stream) ==========
+# ========== ASK GEMINI STREAM (ĐÃ SỬA LỖI API DỰA TRÊN LOG) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     # Lấy lịch sử trực tiếp từ SQLite
     raw_history = state_manager.get_memory(user_id)
@@ -142,8 +142,8 @@ async def ask_gemini_stream(user_id: str, user_input: str):
                 generation_config=genai.GenerationConfig(temperature=0.8)
             )
         )
-        # 🚨 ĐIỂM SỬA LỖI QUAN TRỌNG: Thêm .stream để tránh TypeError
-        for chunk in response_stream.stream:
+        # 🚨 ĐIỂM SỬA LỖI QUAN TRỌNG: Xóa .stream để khắc phục AttributeError từ log
+        for chunk in response_stream:
             if chunk.text:
                 text = chunk.text
                 full_answer += text
@@ -257,9 +257,8 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
                     print(f"🚨 LỖI CHỈNH SỬA TIN NHẮN (Typing Effect): {type(e).__name__}")
                     pass
                 await asyncio.sleep(TYPING_SPEED) 
-
-            # 🚨 ĐIỂM SỬA LỖI LOGIC: Đã loại bỏ khối elif sai logic ở đây.
-            # else: continue # Phần còn lại của chunk sẽ được xử lý ở lần cập nhật tiếp theo.
+            
+            # Đã loại bỏ khối elif sai logic ở đây.
 
     # Cập nhật cuối cùng (không có cursor)
     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Phobe:** {full_response}"
@@ -293,7 +292,7 @@ async def on_ready():
     print("⚡ Gemini SDK version:", genai.__version__)
     print(f"✅ {BOT_NAME} đã sẵn sàng! Logged in as {bot.user}")
     
-    # 🚨 ĐIỂM SỬA LỖI THIẾU SÓT: Thiết lập Status ban đầu
+    # 🚨 Thiết lập Status ban đầu
     await bot.change_presence(status=discord.Status.online, activity=random.choice(activity_list))
 
     random_status.start()
