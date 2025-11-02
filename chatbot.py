@@ -145,7 +145,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
             lambda: gemini_model.generate_content(
                 contents=contents_to_send,
                 stream=True,
-                generation_config=genai.GenerationConfig(temperature=0.8)
+                generation_config=genai.GenerationConfig(temperature=0.9)
             )
         )
         # 🚨 ĐIỂM SỬA LỖI QUAN TRỌNG: Xóa .stream để khắc phục AttributeError từ log
@@ -184,7 +184,7 @@ activity_list = [
 async def random_status():
     global flirt_enable
     if flirt_enable:
-        activity = discord.Game("💞 Flirt Mode ON")
+        activity = discord.Game("💞 Chế Độ Dâm Kích Hoạt")
     else:
         activity = random.choice(activity_list)
     await bot.change_presence(status=random.choice(status_list), activity=activity)
