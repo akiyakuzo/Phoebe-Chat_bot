@@ -14,6 +14,14 @@ from threading import Thread
 from datetime import datetime
 import google.generativeai as genai
 
+# === 1. TÍCH HỢP REPLICATE (MỚI) ===
+try:
+    import replicate
+except ImportError:
+    # Nếu thiếu thư viện, in cảnh báo nhưng không lỗi
+    print("⚠️ Thiếu thư viện 'replicate'. Tính năng tạo ảnh sẽ bị tắt.")
+    replicate = None
+
 # TÍCH HỢP STATE MANAGER (SQLITE)
 try:
     from state_manager import StateManager
@@ -36,14 +44,21 @@ try:
 except Exception as e:
     raise RuntimeError(f"Lỗi khởi tạo Gemini: {e}")
 
+# === 2. CONFIG REPLICATE (ĐÃ CẬP NHẬT MODEL ID) ===
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+# ID Mô hình Anime mới (littlemonsterzhang/wai90_sdxl)
+ANIME_MODEL_ID = "littlemonsterzhang/wai90_sdxl:820ce2c86370ccfac38e9126bcffc58d23348a0ab06179c4b2f49c444ef2d0a6"
+
+
 # ========== CONFIG BOT ==========
 BOT_NAME = "Fibi Béll 💖"
 TOKEN = os.getenv("TOKEN")
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
-flirt_enable = False
+# Đặt flirt_enable là global để truy cập dễ hơn trong các hàm
+flirt_enable_global = False 
 TYPING_SPEED = 0.01
 
-# ========== STYLE INSTRUCTIONS ==========
+# ========== STYLE INSTRUCTIONS (Giữ nguyên) ==========
 PHOBE_SAFE_INSTRUCTION = (
     "✨ Trả lời thân mật, tự nhiên, dễ thương, ngây thơ. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
@@ -73,7 +88,7 @@ PHOBE_COMFORT_INSTRUCTION = (
     "Tối đa 80 từ và ngừng nói khi vượt quá 80 từ."
 )
 
-# ========== PROMPTS ==========
+# ========== PROMPTS (Giữ nguyên) ==========
 PHOBE_BASE_PROMPT = """
 Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 
@@ -98,7 +113,89 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
-# ========== ASK GEMINI STREAM (ĐÃ SỬA LỖI API DỰA TRÊN LOG) ==========
+# ========== HÀM GỌI REPLICATE API (ĐÃ TỐI ƯU TOÀN DIỆN) ==========
+async def generate_image_from_text(image_prompt: str, is_flirt_mode: bool) -> str | None:
+    if not REPLICATE_API_TOKEN or not replicate:
+        print("⚠️ LỖI: Thiếu REPLICATE_API_TOKEN hoặc thư viện replicate. Bỏ qua tạo ảnh.")
+        return None
+
+    try:
+        model = ANIME_MODEL_ID 
+        
+        # --- BASE PROMPT: Mô tả chi tiết Phoebe (Tối ưu theo ảnh gốc) ---
+        base_subject = (
+            "Wuthering Waves Phoebe, official art, solo, 1girl, highly detailed, "
+            "long blonde hair, wavy hair, purple eyes, pale skin, "
+            "white wide-brimmed hat, blue and white dress, white high boots, "
+            "blue mantle, gold accents, holding scepter, dynamic angle, "
+            "masterpiece, best quality, amazing quality," 
+        )
+        
+        # Từ khóa chung cho phong cách (Dựa trên Model ID mới)
+        shared_style_tags = "chinese clothes, tassel, chinese knot, draped silk, gold trim, wind, bokeh, scattered leaves, waterfall, splashed water, looking at viewer"
+        
+        # --- LOGIC PHÂN LOẠI SAFE / FLIRT ---
+        if is_flirt_mode:
+            # === CHẾ ĐỘ GỢI CẢM (NSFW/18+) ===
+            # Thay đổi trang phục và tư thế sang gợi cảm
+            flirt_style = (
+                "large_breasts, (upper_body,close-up:1.4), seductive pose, "
+                "bare shoulders, transparent clothes, "
+                "half-closed eyes, blush, wet clothes, implied nudity, **remove hat**, **remove mantle**,"
+            )
+            final_prompt = f"{base_subject} {flirt_style} {shared_style_tags} {image_prompt}"
+
+            # Negative Prompt rất mạnh mẽ (từ ví dụ của anh + cấm thô tục)
+            negative_prompt = (
+                "bad quality, worst quality, worst detail, sketch, censor, "
+                "blurry, extra limbs, bad anatomy, deformed, signature, "
+                "nipples, genitals, child, loli, lowres, monochrome, ugly"
+            )
+            width_img = 768
+            height_img = 1024 
+
+        else:
+            # === CHẾ ĐỘ BÌNH THƯỜNG (SAFE/CUTE) ===
+            # Trang phục kín đáo, phong cách dễ thương
+            safe_style = "cute and innocent, casual pose, happy expression, bright lighting, outdoor background, full body shot,"
+            final_prompt = f"{base_subject} {safe_style} {shared_style_tags} {image_prompt}"
+
+            # Negative Prompt cho Safe Mode
+            negative_prompt = (
+                "bad quality, worst quality, worst detail, sketch, censor, "
+                "blurry, extra limbs, bad anatomy, deformed, signature, "
+                "cleavage, seductive, nude, explicit, lewd, lowres, monochrome, ugly"
+            )
+            width_img = 1024
+            height_img = 768 
+
+        print(f"DEBUG: FINAL IMAGE PROMPT: {final_prompt[:100]}...")
+
+        # Gọi API Replicate trong một luồng riêng để không chặn Discord
+        output = await asyncio.to_thread(
+            lambda: replicate.run(
+                model,
+                input={
+                    "prompt": final_prompt,
+                    "width": width_img,
+                    "height": height_img,
+                    "num_outputs": 1,
+                    "negative_prompt": negative_prompt
+                }
+            )
+        )
+        
+        # Trả về URL
+        if output and isinstance(output, list) and len(output) > 0:
+            # Lấy URL từ đối tượng file của Replicate
+            return output[0].url
+        return None
+
+    except Exception as e:
+        print(f"🚨 LỖI REPLICATE API: {e}")
+        return None
+
+# ========== ASK GEMINI STREAM (Giữ nguyên) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     # Lấy lịch sử trực tiếp từ SQLite
     raw_history = state_manager.get_memory(user_id)
@@ -128,9 +225,10 @@ async def ask_gemini_stream(user_id: str, user_input: str):
 
     # Xác định instruction dựa trên nội dung
     lower_input = user_input_to_use.lower()
+    global flirt_enable_global # Cập nhật sử dụng biến global
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
-    elif flirt_enable:
+    elif flirt_enable_global:
         instruction = PHOBE_FLIRT_INSTRUCTION
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
@@ -148,10 +246,9 @@ async def ask_gemini_stream(user_id: str, user_input: str):
             lambda: gemini_model.generate_content(
                 contents=contents_to_send,
                 stream=True,
-                generation_config=genai.GenerationConfig(temperature=0.9)
+                generation_config=genai.GenerationConfig(temperature=0.9) 
             )
         )
-        # 🚨 ĐIỂM SỬA LỖI QUAN TRỌNG: Xóa .stream để khắc phục AttributeError từ log
         for chunk in response_stream:
             if chunk.text:
                 text = chunk.text
@@ -185,8 +282,8 @@ activity_list = [
 
 @tasks.loop(minutes=10)
 async def random_status():
-    global flirt_enable
-    if flirt_enable:
+    global flirt_enable_global # Dùng biến global
+    if flirt_enable_global:
         activity = discord.Game("💞 Chế Độ Dâm Kích Hoạt")
     else:
         activity = random.choice(activity_list)
@@ -210,12 +307,16 @@ def keep_alive():
     thread = Thread(target=run_flask, daemon=True)
     thread.start()
 
-# ========== SLASH COMMANDS (ĐÃ SỬA LỖI LOGIC TYPING) ==========
+# ========== SLASH COMMANDS (ĐÃ THÊM LOGIC TẠO ẢNH) ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
-@app_commands.describe(cauhoi="Nhập câu hỏi của bạn")
-async def hoi(interaction: discord.Interaction, cauhoi: str):
+@app_commands.describe(cauhoi="Nhập câu hỏi của bạn", include_image="Bao gồm hình ảnh dựa trên ngữ cảnh (Tốn tín dụng Replicate)?") 
+async def hoi(interaction: discord.Interaction, cauhoi: str, include_image: bool = False):
     await interaction.response.defer(thinking=True)
     user_id = str(interaction.user.id)
+
+    # Lấy trạng thái flirt_enable_global
+    global flirt_enable_global, BOT_NAME
+    current_flirt_enable = flirt_enable_global
 
     image_and_gif_choices = [
         "https://files.catbox.moe/2474tj.png", "https://files.catbox.moe/66v9vw.jpg", 
@@ -249,13 +350,14 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
         "https://files.catbox.moe/r1g1ek.png",
         "https://files.catbox.moe/ft3dj9.gif"
     ]
-
+    thumbnail_url = random.choice(image_and_gif_choices)
+    
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** Đang nói...",
         color=0xFFC0CB
     )
-    embed.set_thumbnail(url=random.choice(image_and_gif_choices))
+    embed.set_thumbnail(url=thumbnail_url)
 
     response_message = await interaction.followup.send(embed=embed)
 
@@ -263,6 +365,7 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
     char_count_to_edit = 0
     typing_cursors = ['**|**', ' ', '**|**', ' ', '**|**', ' ', '**|**', ' ', '...']
 
+    # Lấy và hiển thị câu trả lời (stream)
     async for chunk in ask_gemini_stream(user_id, cauhoi):
         for char in chunk:
             full_response += char
@@ -283,11 +386,30 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
                     print(f"🚨 LỖI CHỈNH SỬA TIN NHẮN (Typing Effect): {type(e).__name__}")
                     pass
                 await asyncio.sleep(TYPING_SPEED) 
-            
-            # Đã loại bỏ khối elif sai logic ở đây.
 
-    # Cập nhật cuối cùng (không có cursor)
+    # === LOGIC TẠO VÀ GẮN ẢNH (SAU KHI GEMINI TRẢ LỜI) ===
+    generated_image_url = None
+    if include_image and replicate:
+        # Sử dụng 80% câu trả lời của bot + câu hỏi của người dùng làm context cho prompt ảnh
+        image_context = f"Question: {cauhoi}. Answer: {full_response[:int(len(full_response)*0.8)]}"
+        
+        # Hiển thị thông báo đang tạo ảnh
+        embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {full_response}\n\n*Phoebe đang vẽ một bức tranh đẹp cho anh nè... 🎨 (Đang gọi Stable Diffusion API)*"
+        try:
+            await response_message.edit(embed=embed)
+        except:
+             pass
+        
+        # Gọi hàm tạo ảnh, truyền trạng thái flirt mode
+        generated_image_url = await generate_image_from_text(image_context, current_flirt_enable)
+        
+    # Cập nhật cuối cùng (không có cursor và gắn ảnh)
     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {full_response}"
+    
+    if generated_image_url:
+        embed.set_image(url=generated_image_url) # Đặt hình ảnh lớn vào embed
+        embed.set_thumbnail(url=thumbnail_url) # Giữ thumbnail cũ
+
     try:
         await response_message.edit(embed=embed)
     except (discord.errors.HTTPException, discord.errors.NotFound) as e:
@@ -306,8 +428,8 @@ async def delete_conv(interaction: discord.Interaction):
 @app_commands.describe(enable="Bật hoặc tắt Flirt Mode")
 @app_commands.default_permissions(manage_guild=True)
 async def chat18plus(interaction: discord.Interaction, enable: bool):
-    global flirt_enable
-    flirt_enable = enable
+    global flirt_enable_global # Cập nhật sử dụng biến global
+    flirt_enable_global = enable
     msg = "💞 Flirt Mode đã được bật!" if enable else "🌸 Flirt Mode đã được tắt!"
     await interaction.response.send_message(msg, ephemeral=True)
 
@@ -317,7 +439,7 @@ async def on_ready():
     # Kiểm tra phiên bản SDK
     print("⚡ Gemini SDK version:", genai.__version__)
     print(f"✅ {BOT_NAME} đã sẵn sàng! Logged in as {bot.user}")
-    
+
     # 🚨 Thiết lập Status ban đầu
     await bot.change_presence(status=discord.Status.online, activity=random.choice(activity_list))
 
