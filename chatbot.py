@@ -372,28 +372,6 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
         print(f"🚨 LỖI CHỈNH SỬA CUỐI CÙNG: {type(e).__name__}")
         pass
 
-@bot.tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt Mode (chỉ Admin có quyền)")
-@app_commands.describe(enable="Bật hoặc tắt Flirt Mode")
-@app_commands.default_permissions(administrator=True) # Chỉ Admin mới có quyền
-async def flirt_mode_command(interaction: discord.Interaction, enable: bool):
-    global flirt_enable_global
-
-    # 🚨 SỬA LỖI ATTRIBUTEERROR TẠI ĐÂY: Dùng interaction.member thay vì interaction.user
-    if not interaction.member.guild_permissions.administrator:
-        await interaction.response.send_message("❌ Anh không phải Admin, em không thể làm theo lệnh này~", ephemeral=True)
-        return
-
-    flirt_enable_global = enable
-    if enable:
-        msg = "💞 Chế Độ **Flirt Mode (18+)** đã được kích hoạt! Phoebe giờ sẽ siêu táo bạo đấy~"
-        await bot.change_presence(activity=discord.Game("💞 Chế Độ Dâm Kích Hoạt"))
-    else:
-        msg = "🌸 Chế Độ **Bình Thường** đã được kích hoạt. Phoebe sẽ lại ngoan ngoãn nè~"
-        # Trả lại trạng thái ngẫu nhiên ngay lập tức
-        await random_status() 
-
-    await interaction.response.send_message(msg, ephemeral=True)
-
 # ⚠️ SỬA LỖI CẮT CODE TẠI ĐÂY - THÊM PHẦN CÒN THIẾU CỦA HÀM NÀY
 @bot.tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt Mode (chỉ Admin có quyền)")
 @app_commands.describe(enable="Bật hoặc tắt Flirt Mode")
