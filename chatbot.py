@@ -41,6 +41,17 @@ try:
     # ✅ KHỞI TẠO CHUẨN SDK 0.8.0+
     genai.configure(api_key=GEMINI_API_KEY)
     gemini_model = genai.GenerativeModel(MODEL_NAME) 
+    
+    # 🚨 BƯỚC MỚI: KIỂM TRA API KEY NGAY LẬP TỨC
+    try:
+        # Thử gọi một API đơn giản để xác nhận key hợp lệ
+        models = list(genai.list_models())
+        print(f"✅ KIỂM TRA GEMINI API THÀNH CÔNG: Đã thấy {len(models)} mô hình.")
+    except Exception as e:
+        # Nếu API Key sai/bị khóa, lỗi sẽ xuất hiện TẠY ĐÂY!
+        print(f"🚨🚨 LỖI NGHIÊM TRỌNG: GEMINI API KEY CÓ VẤN ĐỀ. Lỗi: {e}")
+        raise RuntimeError(f"Lỗi xác thực/kết nối Gemini API: {e}")
+
 except Exception as e:
     raise RuntimeError(f"Lỗi khởi tạo Gemini: {e}")
 
