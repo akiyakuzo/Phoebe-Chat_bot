@@ -1,4 +1,4 @@
-# ==== PATCH PYTHON 3.11 ====
+# ==== PATCH PYTHON 3.11 (Giúp tương thích) ====
 import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
 
@@ -16,13 +16,14 @@ import google.generativeai as genai
 
 # TÍCH HỢP STATE MANAGER (SQLITE)
 try:
+    # Đảm bảo state_manager.py nằm cùng thư mục
     from state_manager import StateManager
     state_manager = StateManager()
 except ImportError:
     # Báo lỗi rõ ràng nếu thiếu file state_manager
     raise ImportError("⚠️ LỖI: Không tìm thấy file state_manager.py. Vui lòng kiểm tra lại cấu trúc repo.")
 
-# ========== CONFIG GOOGLE GENERATIVE AI (Đã sửa lỗi SDK) ==========
+# ========== CONFIG GOOGLE GENERATIVE AI ==========
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
@@ -39,8 +40,14 @@ except Exception as e:
 # ========== CONFIG BOT ==========
 BOT_NAME = "Fibi Béll 💖"
 TOKEN = os.getenv("TOKEN")
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
-flirt_enable = False
+try:
+    GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
+except ValueError:
+    print("⚠️ DISCORD_GUILD_ID không phải là số hợp lệ.")
+    GUILD_ID = 0
+
+# ✅ Sửa lỗi: Thống nhất biến toàn cục quản lý trạng thái Flirt
+flirt_enable_global = False 
 TYPING_SPEED = 0.01
 
 # ========== STYLE INSTRUCTIONS ==========
@@ -57,9 +64,9 @@ PHOBE_FLIRT_INSTRUCTION = (
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại. "
     "Được dùng ngôn từ gợi cảm và lãng mạng có cả gợi tình. "
-    "Hạn chế các từ ngữ như cúng người đã khuất."
     "Không được phép sử dụng từ lỗ hậu trong câu chỉ được dùng cô bé, môi dưới, hoặc cửa dưới, "
     "Nếu có từ nào như cây gậy thịt, cây gậy của anh hãy gọi nó là cây peter của anh. "
+    "Hạn chế các từ ngữ như cúng người đã khuất."
     "Không được nhắc lại câu hỏi. "
     "Tối đa 80 từ và ngừng nói khi vượt quá 80 từ."
 )
@@ -68,8 +75,8 @@ PHOBE_COMFORT_INSTRUCTION = (
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Giữ phong thái dịu dàng, ấm áp và khích lệ tinh thần. "
     "Không dùng ngôn từ gợi cảm hay lãng mạn. "
-    "Không được nhắc lại câu hỏi. "
     "Hạn chế các từ ngũ như cúng người đã khuất."
+    "Không được nhắc lại câu hỏi. "
     "Tối đa 80 từ và ngừng nói khi vượt quá 80 từ."
 )
 
@@ -98,12 +105,9 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
-# ========== ASK GEMINI STREAM (ĐÃ SỬA LỖI API DỰA TRÊN LOG) ==========
+# ========== ASK GEMINI STREAM (Logic đã được tối ưu) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
-    # Lấy lịch sử trực tiếp từ SQLite
     raw_history = state_manager.get_memory(user_id)
-
-    # Format history: [{'role': 'user/model', 'parts': [{'text': 'content'}]}, ...]
     history = [
         {"role": role, "parts": [{"text": content}]} 
         for role, content in raw_history
@@ -122,15 +126,17 @@ async def ask_gemini_stream(user_id: str, user_input: str):
 
     # TẠO PROMPT CỐ ĐỊNH PHÙ HỢP VỚI SDK MỚI
     initial_prompt = [
-        {"role": "user", "parts": [{"text": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"}]},
+        {"role": "user", "parts": [{"text": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}"}]},
         {"role": "model", "parts": [{"text": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}]}
     ]
 
     # Xác định instruction dựa trên nội dung
     lower_input = user_input_to_use.lower()
+    
+    # ✅ Sửa lỗi: Dùng biến thống nhất flirt_enable_global
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
-    elif flirt_enable:
+    elif flirt_enable_global: 
         instruction = PHOBE_FLIRT_INSTRUCTION
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
@@ -142,16 +148,15 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     contents_to_send = initial_prompt + history + [new_user_message]
     full_answer = ""
 
-    # KHỐI TRY/EXCEPT SỐ 1: Bắt lỗi Gemini API
+    # Bắt lỗi Gemini API
     try:
         response_stream = await asyncio.to_thread(
             lambda: gemini_model.generate_content(
                 contents=contents_to_send,
                 stream=True,
-                generation_config=genai.GenerationConfig(temperature=0.9)
+                generation_config=genai.GenerationConfig(temperature=1.0)
             )
         )
-        # 🚨 ĐIỂM SỬA LỖI QUAN TRỌNG: Xóa .stream để khắc phục AttributeError từ log
         for chunk in response_stream:
             if chunk.text:
                 text = chunk.text
@@ -162,20 +167,22 @@ async def ask_gemini_stream(user_id: str, user_input: str):
         yield f"\n⚠️ LỖI KỸ THUẬT: {type(e).__name__}"
         return
 
-    # KHỐI TRY/EXCEPT SỐ 2: LƯU TIN NHẮN VÀO SQLITE
+    # LƯU TIN NHẮN VÀO SQLITE
     try:
         state_manager.add_message(user_id, "user", user_input_cleaned)
         state_manager.add_message(user_id, "model", full_answer)
     except Exception as e:
         print(f"🚨 LỖI SQLITE CHO USER {user_id}: {type(e).__name__}: {e}")
 
-# ========== DISCORD CONFIG (Giữ nguyên) ==========
+# ========== DISCORD CONFIG ==========
 intents = discord.Intents.default()
 intents.message_content = True
+# Thêm intent members cho /chat18plus an toàn hơn
+intents.members = True 
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# ========== BOT STATUS (Giữ nguyên) ==========
+# ========== BOT STATUS ==========
 status_list = [discord.Status.online, discord.Status.idle, discord.Status.dnd]
 activity_list = [
     discord.Game("💖 Trò chuyện cùng anh"),
@@ -183,16 +190,17 @@ activity_list = [
     discord.Game("🌸 An ủi tinh thần")
 ]
 
-@tasks.loop(minutes=10)
+# ✅ Đã sửa lỗi: Thêm @tasks.loop và dùng biến thống nhất
+@tasks.loop(minutes=10) 
 async def random_status():
-    global flirt_enable
-    if flirt_enable:
+    global flirt_enable_global
+    if flirt_enable_global:
         activity = discord.Game("💞 Chế Độ Dâm Kích Hoạt")
     else:
         activity = random.choice(activity_list)
     await bot.change_presence(status=random.choice(status_list), activity=activity)
 
-# ========== FLASK SERVER (Giữ nguyên) ==========
+# ========== FLASK SERVER ==========
 app = Flask(__name__)
 
 @app.route("/")
@@ -204,76 +212,81 @@ def healthz():
     return {"status": "ok", "message": "Phoebe khỏe mạnh nè~ 💖"}, 200
 
 def run_flask():
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    # Sử dụng os.getenv để lấy PORT
+    port = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
 def keep_alive():
     thread = Thread(target=run_flask, daemon=True)
     thread.start()
 
-# ========== SLASH COMMANDS (ĐÃ SỬA LỖI LOGIC TYPING) ==========
-@tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
+# ========== CÁC URL ẢNH THUMBNAIL (Đã sửa lỗi cú pháp) ==========
+IMAGE_AND_GIF_CHOICES = [
+    "https://files.catbox.moe/2474tj.png", "https://files.catbox.moe/66v9vw.jpg", 
+    "https://files.catbox.moe/ezqs00.jpg", "https://files.catbox.moe/yow35q.png",
+    "https://files.catbox.moe/pzbhdp.jpg", "https://files.catbox.moe/lyklnj.jpg",
+    "https://files.catbox.moe/i5sqkr.png", "https://files.catbox.moe/jt184o.jpg",
+    "https://files.catbox.moe/9nq5kw.jpg", "https://files.catbox.moe/45tre3.webp",
+    "https://files.catbox.moe/2y17ot.png", "https://files.catbox.moe/gg8pt0.jpg",
+    "https://files.catbox.moe/jkboop.png", 
+    "https://files.catbox.moe/lszssf.jpg", "https://files.catbox.moe/clabis.jpg",
+    "https://files.catbox.moe/lu9eih.jpg", "https://files.catbox.moe/ykl89r.png",
+    "https://files.catbox.moe/eqxn2q.jpg", "https://files.catbox.moe/0ny8as.jpg",
+    "https://files.catbox.moe/52mpty.jpg", "https://files.catbox.moe/rvgoip.jpg",
+    "https://files.catbox.moe/gswxx2.jpg",
+    "https://files.catbox.moe/ahkkel.jpg",
+    "https://files.catbox.moe/1ny1ye.jpg",
+    "https://files.catbox.moe/sdz4cr.jpg",
+    "https://files.catbox.moe/riqd31.jpg",
+    "https://files.catbox.moe/hg2zmw.jpg",
+    "https://files.catbox.moe/eg1x42.png",
+    "https://files.catbox.moe/6dmotd.png",
+    "https://files.catbox.moe/z2nrcr.png",
+    "https://files.catbox.moe/sgjbgt.jpg",
+    "https://files.catbox.moe/mkrznb.png",
+    "https://files.catbox.moe/xbin90.png",
+    "https://files.catbox.moe/k3resg.png",
+    "https://files.catbox.moe/gr9k69.png",
+    "https://files.catbox.moe/99mbse.jpg",
+    "https://files.catbox.moe/hj618x.jpg",
+    "https://files.catbox.moe/9g6p67.png",
+    "https://files.catbox.moe/r1g1ek.png",
+    "https://files.catbox.moe/oqboop.jpg",
+    "https://files.catbox.moe/mcsoj5.jpg",
+    "https://files.catbox.moe/xifk2z.jpg",
+    "https://files.catbox.moe/qoo21z.jpg",
+    "https://files.catbox.moe/r16aub.jpg",
+    "https://files.catbox.moe/cs8ujd.jpg",
+    "https://files.catbox.moe/jnkkbw.jpg",
+    "https://files.catbox.moe/onytnj.jpg",
+    "https://files.catbox.moe/874c6y.jpg",
+    "https://files.catbox.moe/onytnj.jpg",
+    "https://files.catbox.moe/km87gd.jpg",
+    "https://files.catbox.moe/w9r3oq.jpg",
+    "https://files.catbox.moe/33yeo4.jpg",
+    "https://files.catbox.moe/w9r3oq.jpg",
+    "https://files.catbox.moe/3zk5iq.webp",
+    "https://files.catbox.moe/16e21d.webp",
+    "https://files.catbox.moe/wulp7f.webp", 
+    "https://files.catbox.moe/rvj76h.webp",
+    "https://files.catbox.moe/453x30.webp",
+    "https://files.catbox.moe/ft3dj9.gif"
+] 
+
+# ========== SLASH COMMANDS ==========
+@bot.tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
 @app_commands.describe(cauhoi="Nhập câu hỏi của bạn")
 async def hoi(interaction: discord.Interaction, cauhoi: str):
+    # ✅ FIX: Gửi defer ngay lập tức để tránh Discord timeout
     await interaction.response.defer(thinking=True)
     user_id = str(interaction.user.id)
-
-       image_and_gif_choices = [
-        "https://files.catbox.moe/2474tj.png", "https://files.catbox.moe/66v9vw.jpg", 
-        "https://files.catbox.moe/ezqs00.jpg", "https://files.catbox.moe/yow35q.png",
-        "https://files.catbox.moe/pzbhdp.jpg", "https://files.catbox.moe/lyklnj.jpg",
-        "https://files.catbox.moe/i5sqkr.png", "https://files.catbox.moe/jt184o.jpg",
-        "https://files.catbox.moe/9nq5kw.jpg", "https://files.catbox.moe/45tre3.webp",
-        "https://files.catbox.moe/2y17ot.png", "https://files.catbox.moe/gg8pt0.jpg",
-        "https://files.catbox.moe/jkboop.png", 
-        "https://files.catbox.moe/lszssf.jpg", "https://files.catbox.moe/clabis.jpg",
-        "https://files.catbox.moe/lu9eih.jpg", "https://files.catbox.moe/ykl89r.png",
-        "https://files.catbox.moe/eqxn2q.jpg", "https://files.catbox.moe/0ny8as.jpg",
-        "https://files.catbox.moe/52mpty.jpg", "https://files.catbox.moe/rvgoip.jpg",
-        "https://files.catbox.moe/gswxx2.jpg",
-        "https://files.catbox.moe/ahkkel.jpg",
-        "https://files.catbox.moe/1ny1ye.jpg",
-        "https://files.catbox.moe/sdz4cr.jpg",
-        "https://files.catbox.moe/riqd31.jpg",
-        "https://files.catbox.moe/hg2zmw.jpg",
-        "https://files.catbox.moe/eg1x42.png",
-        "https://files.catbox.moe/6dmotd.png",
-        "https://files.catbox.moe/z2nrcr.png",
-        "https://files.catbox.moe/sgjbgt.jpg",
-        "https://files.catbox.moe/mkrznb.png",
-        "https://files.catbox.moe/xbin90.png",
-        "https://files.catbox.moe/k3resg.png",
-        "https://files.catbox.moe/gr9k69.png",
-        "https://files.catbox.moe/99mbse.jpg",
-        "https://files.catbox.moe/hj618x.jpg",
-        "https://files.catbox.moe/9g6p67.png",
-        "https://files.catbox.moe/r1g1ek.png",
-        "https://files.catbox.moe/oqboop.jpg",
-        "https://files.catbox.moe/mcsoj5.jpg",
-        "https://files.catbox.moe/xifk2z.jpg",
-        "https://files.catbox.moe/qoo21z.jpg",
-        "https://files.catbox.moe/r16aub.jpg",
-        "https://files.catbox.moe/cs8ujd.jpg",
-        "https://files.catbox.moe/jnkkbw.jpg",
-        "https://files.catbox.moe/onytnj.jpg",
-        "https://files.catbox.moe/874c6y.jpg",
-        "https://files.catbox.moe/onytnj.jpg",
-        "https://files.catbox.moe/km87gd.jpg",
-        "https://files.catbox.moe/w9r3oq.jpg",
-        "https://files.catbox.moe/33yeo4.jpg",
-        "https://files.catbox.moe/w9r3oq.jpg",
-        "https://files.catbox.moe/3zk5iq.webp",
-        "https://files.catbox.moe/16e21d.webp",
-        "https://files.catbox.moe/wulp7f.webp"
-        "https://files.catbox.moe/rvj76h.webp",
-        "https://files.catbox.moe/453x30.webp",
-        "https://files.catbox.moe/ft3dj9.gif"
-    ]
+    
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** Đang nói...",
         color=0xFFC0CB
     )
-    embed.set_thumbnail(url=random.choice(image_and_gif_choices))
+    embed.set_thumbnail(url=random.choice(IMAGE_AND_GIF_CHOICES)) 
 
     response_message = await interaction.followup.send(embed=embed)
 
@@ -286,23 +299,18 @@ async def hoi(interaction: discord.Interaction, cauhoi: str):
             full_response += char
             char_count_to_edit += 1
 
-            # Cập nhật cứ sau 5 ký tự
             if char_count_to_edit % 5 == 0:
                 cursor_index = (char_count_to_edit // 5) % len(typing_cursors)
                 current_cursor = typing_cursors[cursor_index]
 
-                # Tránh vượt giới hạn 4096 ký tự của Embed
                 display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
 
                 embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {display_text} {current_cursor}"
                 try:
                     await response_message.edit(embed=embed)
-                except (discord.errors.HTTPException, discord.errors.NotFound) as e:
-                    print(f"🚨 LỖI CHỈNH SỬA TIN NHẮN (Typing Effect): {type(e).__name__}")
+                except (discord.errors.HTTPException, discord.errors.NotFound):
                     pass
                 await asyncio.sleep(TYPING_SPEED) 
-
-            # Đã loại bỏ khối elif sai logic ở đây.
 
     # Cập nhật cuối cùng (không có cursor)
     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {full_response}"
@@ -324,22 +332,33 @@ async def delete_conv(interaction: discord.Interaction):
 @app_commands.describe(enable="Bật hoặc tắt Flirt Mode")
 @app_commands.default_permissions(manage_guild=True)
 async def chat18plus(interaction: discord.Interaction, enable: bool):
-    global flirt_enable
-    flirt_enable = enable
-    msg = "💞 Flirt Mode đã được bật!" if enable else "🌸 Flirt Mode đã được tắt!"
+    # ✅ FIX: Dùng biến thống nhất flirt_enable_global
+    global flirt_enable_global 
+    flirt_enable_global = enable
+    
+    if enable:
+        msg = "💞 Chế Độ **Flirt Mode (18+)** đã được kích hoạt! Phoebe giờ sẽ siêu táo bạo đấy~"
+        await bot.change_presence(activity=discord.Game("💞 Chế Độ Dâm Kích Hoạt"))
+    else:
+        msg = "🌸 Chế Độ **Bình Thường** đã được kích hoạt. Phoebe sẽ lại ngoan ngoãn nè~"
+        random_status.restart() # Khởi động lại loop để cập nhật activity ngay lập tức
+
     await interaction.response.send_message(msg, ephemeral=True)
 
-# ========== BOT EVENTS (ĐÃ THÊM CHANGE_PRESENCE BAN ĐẦU) ==========
+
+# ========== BOT EVENTS ==========
 @bot.event
 async def on_ready():
-    # Kiểm tra phiên bản SDK
-    print("⚡ Gemini SDK version:", genai.__version__)
     print(f"✅ {BOT_NAME} đã sẵn sàng! Logged in as {bot.user}")
 
-    # 🚨 Thiết lập Status ban đầu
+    # Thiết lập Status ban đầu
     await bot.change_presence(status=discord.Status.online, activity=random.choice(activity_list))
 
-    random_status.start()
+    # Khởi động task loop
+    if not random_status.is_running():
+        random_status.start()
+
+    # Đồng bộ lệnh Slash
     if GUILD_ID:
         await tree.sync(guild=discord.Object(GUILD_ID))
         print(f"🔄 Slash commands đã sync cho guild {GUILD_ID}")
@@ -349,5 +368,7 @@ async def on_ready():
 
 # ========== RUN BOT ==========
 if __name__ == "__main__":
+    if not TOKEN:
+        raise RuntimeError("⚠️ Thiếu TOKEN! Vui lòng kiểm tra biến môi trường.")
     keep_alive()
     bot.run(TOKEN)
