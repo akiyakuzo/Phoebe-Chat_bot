@@ -319,7 +319,7 @@ def keep_alive():
     thread.start()
 
 # ========== SLASH COMMANDS (ĐÃ THÊM LOGIC TẠO ẢNH & DEBUG) ==========
-@chatbot.tree.command(name="hoi", description="Hỏi Fibi bất cứ điều gì!")
+@bot.tree.command(name="hoi", description="Hỏi Fibi bất cứ điều gì!")
 async def hoi_command(interaction: discord.Interaction, prompt: str):
     # 🚨 THÊM DÒNG LOG NÀY VÀO NGAY DÒNG ĐẦU TIÊN CỦA HÀM XỬ LÝ LỆNH
     print(f"DEBUG_START_HOI: Nhận lệnh /hoi từ {interaction.user.name} với prompt: {prompt[:30]}...") 
@@ -368,20 +368,38 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
 
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
-        description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** Đang nói...",
+        description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** Đang nói...", # SỬA 'cauhoi' thành 'prompt'
         color=0xFFC0CB
     )
     embed.set_thumbnail(url=thumbnail_url)
+    
+    # Bỏ qua `interaction.response.defer` vì anh dùng `interaction.followup.send` ngay sau đó.
+    # Tuy nhiên, anh phải dùng `await interaction.response.defer(thinking=True)` trước 
+    # khi gọi `interaction.followup.send()`. Nếu không, sẽ gây lỗi Discord Timeout (3 giây).
+    
+    # ⚠️ THÊM LỆNH DEFER ĐỂ TRÁNH DISCORD TIMEOUT
+    try:
+        await interaction.response.defer(thinking=True)
+    except Exception as e:
+        print(f"🚨 LỖI DEFER: {e}")
+        return
 
-    response_message = await interaction.followup.send(embed=embed)
+    # Sửa: response_message phải được nhận từ followup.send SAU defer
+    try:
+        response_message = await interaction.followup.send(embed=embed)
+    except Exception as e:
+        print(f"🚨 LỖI FOLLOWUP.SEND: {e}")
+        return
+
 
     full_response = ""
     char_count_to_edit = 0
-    typing_cursors = ['**|**', ' ', '**|**', ' ', '**|**', ' ', '**|**', ' ', '...']
+    typing_cursors = ['**|**', ' ', '**|**', ' ', '...'] # Rút gọn cursor cho dễ nhìn
 
     # Lấy và hiển thị câu trả lời (stream)
     try:
-        async for chunk in ask_gemini_stream(user_id, cauhoi):
+        # SỬA: Thay cauhoi bằng prompt
+        async for chunk in ask_gemini_stream(user_id, prompt): 
             for char in chunk:
                 full_response += char
                 char_count_to_edit += 1
@@ -394,7 +412,8 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
                     # Tránh vượt giới hạn 4096 ký tự của Embed
                     display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
 
-                    embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {display_text} {current_cursor}"
+                    # SỬA: Thay cauhoi bằng prompt
+                    embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** {display_text} {current_cursor}" 
                     try:
                         await response_message.edit(embed=embed)
                     except (discord.errors.HTTPException, discord.errors.NotFound) as e:
@@ -405,39 +424,41 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
         # Kiểm tra nếu câu trả lời rỗng (lỗi API nghiêm trọng xảy ra)
         if not full_response:
             full_response = "❌ LỖI GEMINI API NGHIÊM TRỌNG: API key có thể bị khóa (403 Forbidden) hoặc có lỗi kết nối."
-    
+
     except Exception as e:
         # Bắt lỗi toàn bộ quá trình stream Gemini
         full_response = f"⚠️ LỖI CHAT API: {type(e).__name__} - Vui lòng kiểm tra Log Render để biết thêm chi tiết!"
         print(f"🚨🚨 LỖI GEMINI CHÍNH: {type(e).__name__} - {e}")
-        
+
     # === LOGIC TẠO VÀ GẮN ẢNH (SAU KHI GEMINI TRẢ LỜI) ===
     generated_image_url = None
-    if include_image:
-        if not replicate:
-            print("⚠️ LỖI REPLICATE: Thư viện 'replicate' chưa được import thành công. Bỏ qua tạo ảnh.")
-        else:
-            # Sử dụng 80% câu trả lời của bot + câu hỏi của người dùng làm context cho prompt ảnh
-            image_context = f"Question: {cauhoi}. Answer: {full_response[:int(len(full_response)*0.8)]}"
+    # ⚠️ LỖI NÀY CẦN SỬA: BIẾN `include_image` KHÔNG ĐƯỢC ĐỊNH NGHĨA.
+    # Tạm thời gỡ bỏ khối này. Nếu anh muốn tính năng tạo ảnh, anh cần thêm 
+    # một biến Boolean (ví dụ: `include_image = True` hoặc thêm vào slash command).
 
-            # Hiển thị thông báo đang tạo ảnh
-            embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {full_response}\n\n*Phoebe đang vẽ một bức tranh đẹp cho anh nè... 🎨 (Đang gọi Stable Diffusion API)*"
-            try:
-                await response_message.edit(embed=embed)
-            except:
-                 pass
-
-            # Gọi hàm tạo ảnh, truyền trạng thái flirt mode
-            try:
-                generated_image_url = await generate_image_from_text(image_context, current_flirt_enable)
-            except Exception as e:
-                # Bắt lỗi toàn bộ quá trình gọi Replicate API
-                print(f"🚨🚨 LỖI REPLICATE CHÍNH: {type(e).__name__} - {e}")
-                full_response += "\n\n**[LỖI TẠO ẢNH: Vui lòng kiểm tra Log Render]**"
+    # 🚨 ĐỂ KHẮC PHỤC LỖI BIẾN KHÔNG XÁC ĐỊNH, CHỈ DÙNG LOGIC TẠO ẢNH NẾU PROMPT YÊU CẦU.
+    if ("vẽ" in prompt.lower() or "ảnh" in prompt.lower() or "image" in prompt.lower() or "draw" in prompt.lower()) and replicate:
+        print("DEBUG: Kích hoạt tạo ảnh.")
+        
+        # LỆNH DEFER LẦN 2 (NẾU CẦN THIẾT) HOẶC CHỈ CẬP NHẬT TRẠNG THÁI
+        embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** {full_response}\n\n*Phoebe đang vẽ một bức tranh đẹp cho anh nè... 🎨 (Đang gọi Stable Diffusion API)*"
+        try:
+            await response_message.edit(embed=embed)
+        except:
+            pass
+            
+        try:
+            # SỬA: Thay cauhoi bằng prompt
+            image_context = f"Question: {prompt}. Answer: {full_response[:int(len(full_response)*0.8)]}" 
+            generated_image_url = await generate_image_from_text(image_context, current_flirt_enable)
+        except Exception as e:
+            print(f"🚨🚨 LỖI REPLICATE CHÍNH: {type(e).__name__} - {e}")
+            full_response += "\n\n**[LỖI TẠO ẢNH: Vui lòng kiểm tra Log Render]**"
 
 
     # Cập nhật cuối cùng (không có cursor và gắn ảnh)
-    embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {full_response}"
+    # SỬA: Thay cauhoi bằng prompt
+    embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** {full_response}" 
 
     if generated_image_url:
         embed.set_image(url=generated_image_url) # Đặt hình ảnh lớn vào embed
