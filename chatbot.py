@@ -23,9 +23,11 @@ except ImportError:
 
 # TÍCH HỢP STATE MANAGER (SQLITE)
 try:
+    # Đảm bảo state_manager.py nằm cùng thư mục
     from state_manager import StateManager
     state_manager = StateManager()
 except ImportError:
+    # Lỗi nghiêm trọng nếu không tìm thấy file state_manager.py
     raise ImportError("⚠️ LỖI: Không tìm thấy file state_manager.py. Vui lòng kiểm tra lại cấu trúc repo.")
 
 # ========== CONFIG GOOGLE GENERATIVE AI ==========
@@ -58,7 +60,14 @@ ANIME_MODEL_ID = "littlemonsterzhang/wai90_sdxl:820ce2c86370ccfac38e9126bcffc58d
 # ========== CONFIG BOT ==========
 BOT_NAME = "Fibi Béll 💖"
 TOKEN = os.getenv("TOKEN")
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
+# Chắc chắn GUILD_ID được chuyển đổi sang int
+try:
+    GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
+except ValueError:
+    print("⚠️ DISCORD_GUILD_ID không phải là số hợp lệ. Dùng đồng bộ toàn cục.")
+    GUILD_ID = 0
+
+# Sử dụng một biến toàn cục để quản lý trạng thái Flirt
 flirt_enable_global = False 
 TYPING_SPEED = 0.01
 
@@ -76,11 +85,10 @@ PHOBE_FLIRT_INSTRUCTION = (
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Không viết mô tả hành động hay độc thoại. "
     "Được dùng ngôn từ gợi cảm và lãng mạng có cả gợi tình. "
-    "Hạn chế các từ ngữ như cúng người đã khuất."
     "Không được phép sử dụng từ lỗ hậu trong câu chỉ được dùng cô bé, môi dưới, hoặc cửa dưới, "
     "Nếu có từ nào như cây gậy thịt, cây gậy của anh hãy gọi nó là cây peter của anh. "
+    "Hạn chế các từ ngữ như cúng người đã khuất."
     "Không được nhắc lại câu hỏi. "
-    "Biết điểm dừng không đòi hỏi quá nhiều. "
     "Tối đa 80 từ và ngừng nói khi vượt quá 80 từ."
 )
 PHOBE_COMFORT_INSTRUCTION = (
@@ -88,8 +96,8 @@ PHOBE_COMFORT_INSTRUCTION = (
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
     "Giữ phong thái dịu dàng, ấm áp và khích lệ tinh thần. "
     "Không dùng ngôn từ gợi cảm hay lãng mạn. "
-    "Không được nhắc lại câu hỏi. "
     "Hạn chế các từ ngũ như cúng người đã khuất."
+    "Không được nhắc lại câu hỏi. "
     "Tối đa 80 từ và ngừng nói khi vượt quá 80 từ."
 )
 
@@ -139,6 +147,7 @@ async def generate_image_from_text(prompt: str, flirt_mode: bool = False):
     # Gọi Replicate API
     print(f"DEBUG_REPLICATE: Gửi prompt: {final_prompt[:80]}...")
     
+    # Dùng asyncio.to_thread để chạy Replicate sync call trong threadpool
     output = await asyncio.to_thread(
         lambda: replicate.run(
             ANIME_MODEL_ID,
@@ -206,7 +215,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
                 contents=contents_to_send,
                 stream=True,
                 config=genai.GenerationConfig(
-                    temperature=1.0,
+                    temperature=0.9,
                     system_instruction=final_system_instruction 
                 )
             )
@@ -231,6 +240,8 @@ async def ask_gemini_stream(user_id: str, user_input: str):
 # ========== DISCORD CONFIG ==========
 intents = discord.Intents.default()
 intents.message_content = True
+# Thêm intent members để đảm bảo interaction.member hoạt động chính xác trong guild
+intents.members = True 
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
@@ -263,13 +274,15 @@ def healthz():
     return {"status": "ok", "message": "Phoebe khỏe mạnh nè~ 💖"}, 200
 
 def run_flask():
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    # Sử dụng os.getenv để lấy PORT
+    port = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
 def keep_alive():
     thread = Thread(target=run_flask, daemon=True)
     thread.start()
 
-# ========== SLASH COMMANDS (ĐÃ SỬA LỖI DEFER VÀ TRÙNG LẶP) ==========
+# ========== SLASH COMMANDS ==========
 
 @bot.tree.command(name="hoi", description="Hỏi Fibi bất cứ điều gì!")
 async def hoi_command(interaction: discord.Interaction, prompt: str):
@@ -309,6 +322,25 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
         "https://files.catbox.moe/hj618x.jpg",
         "https://files.catbox.moe/9g6p67.png",
         "https://files.catbox.moe/r1g1ek.png",
+        "https://files.catbox.moe/oqboop.jpg",
+        "https://files.catbox.moe/mcsoj5.jpg",
+        "https://files.catbox.moe/xifk2z.jpg",
+        "https://files.catbox.moe/qoo21z.jpg",
+        "https://files.catbox.moe/r16aub.jpg",
+        "https://files.catbox.moe/cs8ujd.jpg",
+        "https://files.catbox.moe/jnkkbw.jpg",
+        "https://files.catbox.moe/onytnj.jpg",
+        "https://files.catbox.moe/874c6y.jpg",
+        "https://files.catbox.moe/onytnj.jpg",
+        "https://files.catbox.moe/km87gd.jpg",
+        "https://files.catbox.moe/w9r3oq.jpg",
+        "https://files.catbox.moe/33yeo4.jpg",
+        "https://files.catbox.moe/w9r3oq.jpg",
+        "https://files.catbox.moe/3zk5iq.webp",
+        "https://files.catbox.moe/16e21d.webp",
+        "https://files.catbox.moe/wulp7f.webp"
+        "https://files.catbox.moe/rvj76h.webp",
+        "https://files.catbox.moe/453x30.webp",
         "https://files.catbox.moe/ft3dj9.gif"
     ]
     thumbnail_url = random.choice(image_and_gif_choices)
@@ -336,6 +368,7 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
 
     full_response = ""
     char_count_to_edit = 0
+    # Cập nhật typing_cursors để tránh lỗi khi log bị cắt
     typing_cursors = ['**|**', ' ', '**|**', ' ', '...'] 
 
     # 3. LẤY VÀ HIỂN THỊ CÂU TRẢ LỜI (STREAM)
@@ -350,26 +383,29 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
                     cursor_index = (char_count_to_edit // 5) % len(typing_cursors)
                     current_cursor = typing_cursors[cursor_index]
 
+                    # Giới hạn độ dài để tránh lỗi Discord max embed size
                     display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
                     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** {display_text} {current_cursor}" 
                     try:
                         await response_message.edit(embed=embed)
                     except (discord.errors.HTTPException, discord.errors.NotFound):
-                        pass
+                        pass # Bỏ qua lỗi nếu tin nhắn bị xóa hoặc lỗi edit quá nhanh
                     await asyncio.sleep(TYPING_SPEED) 
 
         if not full_response:
+            # Thêm thông báo lỗi rõ ràng hơn
             full_response = "❌ LỖI GEMINI API NGHIÊM TRỌNG: API key có thể bị khóa (403 Forbidden) hoặc có lỗi kết nối."
 
     except Exception as e:
         full_response = f"⚠️ LỖI CHAT API: {type(e).__name__} - Vui lòng kiểm tra Log Render để biết thêm chi tiết!"
         print(f"🚨🚨 LỖI GEMINI CHÍNH: {type(e).__name__} - {e}")
 
-    # 4. LOGIC TẠO VÀ GẮN ẢNH
+    # 4. LOGIC TẠO VÀ GẮN ẢNH (CHỈ NẾU CHƯA CÓ LỖI LỚN)
     generated_image_url = None
-    if ("vẽ" in prompt.lower() or "ảnh" in prompt.lower() or "image" in prompt.lower() or "draw" in prompt.lower()) and replicate:
+    if full_response and not full_response.startswith("⚠️ LỖI CHAT API:") and ("vẽ" in prompt.lower() or "ảnh" in prompt.lower() or "image" in prompt.lower() or "draw" in prompt.lower()) and replicate:
         print("DEBUG: Kích hoạt tạo ảnh.")
 
+        # Cập nhật trạng thái chờ tạo ảnh
         embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** {full_response}\n\n*Phoebe đang vẽ một bức tranh đẹp cho anh nè... 🎨 (Đang gọi Stable Diffusion API)*"
         try:
             await response_message.edit(embed=embed)
@@ -390,6 +426,10 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
     if generated_image_url:
         embed.set_image(url=generated_image_url)
         embed.set_thumbnail(url=thumbnail_url) 
+    
+    # Đảm bảo embed không vượt quá giới hạn ký tự
+    if len(embed.description) > 4096:
+         embed.description = embed.description[:4000] + "\n\n... (Câu trả lời bị cắt bớt)"
 
     try:
         await response_message.edit(embed=embed)
@@ -397,32 +437,38 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
         print(f"🚨 LỖI CHỈNH SỬA CUỐI CÙNG: {type(e).__name__}")
         pass
 
-# 🚨 CHỈ GIỮ LẠI MỘT LẦN ĐỊNH NGHĨA LỆNH CHAT18PLUS NÀY
+# ✅ ĐÃ SỬA LỖI ATTRIBUTEERROR CHO CHAT18PLUS
 @bot.tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt Mode (chỉ Admin có quyền)")
 @app_commands.describe(enable="Bật hoặc tắt Flirt Mode")
 @app_commands.default_permissions(administrator=True) 
 async def flirt_mode_command(interaction: discord.Interaction, enable: bool):
     global flirt_enable_global
 
-    # Đảm bảo lệnh không bị timeout
+    # 1. Gửi defer để tránh timeout. KHÔNG CẦN KIỂM TRA QUYỀN VÌ @app_commands.default_permissions ĐÃ LỌC
     await interaction.response.defer(ephemeral=True, thinking=True)
     
+    # 2. Xử lý logic
     flirt_enable_global = enable
     if enable:
         msg = "💞 Chế Độ **Flirt Mode (18+)** đã được kích hoạt! Phoebe giờ sẽ siêu táo bạo đấy~"
-        # Đảm bảo bot thay đổi status ngay lập tức
         await bot.change_presence(activity=discord.Game("💞 Chế Độ Dâm Kích Hoạt"))
     else:
         msg = "🌸 Chế Độ **Bình Thường** đã được kích hoạt. Phoebe sẽ lại ngoan ngoãn nè~"
-        # Trả lại trạng thái ngẫu nhiên ngay lập tức
-        await random_status() 
+        # Đảm bảo random_status được gọi (hoặc ta gọi nó trực tiếp)
+        random_status.restart() # Dùng restart để đảm bảo nó chạy lại ngay lập tức
 
+    # 3. Gửi phản hồi
     await interaction.followup.send(msg, ephemeral=True)
 
 # ========== EVENT HANDLERS VÀ KHỞI CHẠY BOT (CẦN THIẾT) ==========
 
 @bot.event
 async def on_ready():
+    # Sửa lỗi: Đảm bảo intent members được bật trong bot config và trong Discord Portal
+    print(f"DEBUG: Intents hiện tại: {bot.intents.value}")
+    if not bot.intents.members:
+         print("⚠️ CẢNH BÁO: Intent Members KHÔNG được bật! Lệnh cần interaction.member có thể bị lỗi.")
+    
     if GUILD_ID:
         guild = discord.Object(id=GUILD_ID)
         await bot.tree.sync(guild=guild)
@@ -446,6 +492,7 @@ if __name__ == "__main__":
 
     # Bắt đầu Discord bot
     try:
+        # Nếu bot.run bị lỗi, sẽ in ra thông báo chi tiết hơn
         bot.run(TOKEN)
     except Exception as e:
         print(f"🚨 LỖI KHỞI CHẠY DISCORD BOT: {e}")
