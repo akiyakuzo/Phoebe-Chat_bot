@@ -80,6 +80,7 @@ PHOBE_FLIRT_INSTRUCTION = (
     "Không được phép sử dụng từ lỗ hậu trong câu chỉ được dùng cô bé, môi dưới, hoặc cửa dưới, "
     "Nếu có từ nào như cây gậy thịt, cây gậy của anh hãy gọi nó là cây peter của anh. "
     "Không được nhắc lại câu hỏi. "
+    "Biết điểm dừng không đòi hỏi quá nhiều. "
     "Tối đa 80 từ và ngừng nói khi vượt quá 80 từ."
 )
 PHOBE_COMFORT_INSTRUCTION = (
@@ -205,7 +206,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
                 contents=contents_to_send,
                 stream=True,
                 config=genai.GenerationConfig(
-                    temperature=0.9,
+                    temperature=1.0,
                     system_instruction=final_system_instruction 
                 )
             )
@@ -403,20 +404,20 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
 async def flirt_mode_command(interaction: discord.Interaction, enable: bool):
     global flirt_enable_global
 
-    # Đã sửa: Dùng interaction.member để kiểm tra quyền
-    if not interaction.member.guild_permissions.administrator:
-        await interaction.response.send_message("❌ Anh không phải Admin, em không thể làm theo lệnh này~", ephemeral=True)
-        return
-
+    # Đảm bảo lệnh không bị timeout
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    
     flirt_enable_global = enable
     if enable:
         msg = "💞 Chế Độ **Flirt Mode (18+)** đã được kích hoạt! Phoebe giờ sẽ siêu táo bạo đấy~"
+        # Đảm bảo bot thay đổi status ngay lập tức
         await bot.change_presence(activity=discord.Game("💞 Chế Độ Dâm Kích Hoạt"))
     else:
         msg = "🌸 Chế Độ **Bình Thường** đã được kích hoạt. Phoebe sẽ lại ngoan ngoãn nè~"
+        # Trả lại trạng thái ngẫu nhiên ngay lập tức
         await random_status() 
 
-    await interaction.response.send_message(msg, ephemeral=True)
+    await interaction.followup.send(msg, ephemeral=True)
 
 # ========== EVENT HANDLERS VÀ KHỞI CHẠY BOT (CẦN THIẾT) ==========
 
