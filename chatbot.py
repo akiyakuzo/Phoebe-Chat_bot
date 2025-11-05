@@ -124,94 +124,13 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
-# ========== HÀM GỌI REPLICATE API (ĐÃ TỐI ƯU TOÀN DIỆN) ==========
-async def generate_image_from_text(image_prompt: str, is_flirt_mode: bool) -> str | None:
-    if not REPLICATE_API_TOKEN or not replicate:
-        print("⚠️ LỖI: Thiếu REPLICATE_API_TOKEN hoặc thư viện replicate. Bỏ qua tạo ảnh.")
-        return None
-
-    try:
-        model = ANIME_MODEL_ID 
-        
-        # --- BASE PROMPT: Mô tả chi tiết Phoebe (Tối ưu theo ảnh gốc) ---
-        base_subject = (
-            "Wuthering Waves Phoebe, official art, solo, 1girl, highly detailed, "
-            "long blonde hair, wavy hair, purple eyes, pale skin, "
-            "white wide-brimmed hat, blue and white dress, white high boots, "
-            "blue mantle, gold accents, holding scepter, dynamic angle, "
-            "masterpiece, best quality, amazing quality," 
-        )
-        
-        # Từ khóa chung cho phong cách (Dựa trên Model ID mới)
-        shared_style_tags = "chinese clothes, tassel, chinese knot, draped silk, gold trim, wind, bokeh, scattered leaves, waterfall, splashed water, looking at viewer"
-        
-        # --- LOGIC PHÂN LOẠI SAFE / FLIRT ---
-        if is_flirt_mode:
-            # === CHẾ ĐỘ GỢI CẢM (NSFW/18+) ===
-            # Thay đổi trang phục và tư thế sang gợi cảm
-            flirt_style = (
-                "large_breasts, (upper_body,close-up:1.4), seductive pose, "
-                "bare shoulders, transparent clothes, "
-                "half-closed eyes, blush, wet clothes, implied nudity, **remove hat**, **remove mantle**,"
-            )
-            final_prompt = f"{base_subject} {flirt_style} {shared_style_tags} {image_prompt}"
-
-            # Negative Prompt rất mạnh mẽ (từ ví dụ của anh + cấm thô tục)
-            negative_prompt = (
-                "bad quality, worst quality, worst detail, sketch, censor, "
-                "blurry, extra limbs, bad anatomy, deformed, signature, "
-                "nipples, genitals, child, loli, lowres, monochrome, ugly"
-            )
-            width_img = 768
-            height_img = 1024 
-
-        else:
-            # === CHẾ ĐỘ BÌNH THƯỜNG (SAFE/CUTE) ===
-            # Trang phục kín đáo, phong cách dễ thương
-            safe_style = "cute and innocent, casual pose, happy expression, bright lighting, outdoor background, full body shot,"
-            final_prompt = f"{base_subject} {safe_style} {shared_style_tags} {image_prompt}"
-
-            # Negative Prompt cho Safe Mode
-            negative_prompt = (
-                "bad quality, worst quality, worst detail, sketch, censor, "
-                "blurry, extra limbs, bad anatomy, deformed, signature, "
-                "cleavage, seductive, nude, explicit, lewd, lowres, monochrome, ugly"
-            )
-            width_img = 1024
-            height_img = 768 
-
-        print(f"DEBUG: FINAL IMAGE PROMPT: {final_prompt[:100]}...")
-
-        # Gọi API Replicate trong một luồng riêng để không chặn Discord
-        output = await asyncio.to_thread(
-            lambda: replicate.run(
-                model,
-                input={
-                    "prompt": final_prompt,
-                    "width": width_img,
-                    "height": height_img,
-                    "num_outputs": 1,
-                    "negative_prompt": negative_prompt
-                }
-            )
-        )
-        
-        # Trả về URL
-        if output and isinstance(output, list) and len(output) > 0:
-            # Lấy URL từ đối tượng file của Replicate
-            return output[0].url
-        return None
-
-    except Exception as e:
-        print(f"🚨 LỖI REPLICATE API: {e}")
-        return None
-
-# ========== ASK GEMINI STREAM (Giữ nguyên) ==========
+# ========== ASK GEMINI STREAM (Đã cập nhật cho SDK 0.8.0+) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
     # Lấy lịch sử trực tiếp từ SQLite
     raw_history = state_manager.get_memory(user_id)
-
+    
     # Format history: [{'role': 'user/model', 'parts': [{'text': 'content'}]}, ...]
+    # Lịch sử chỉ cần chứa các tin nhắn của user và model, không cần system prompt
     history = [
         {"role": role, "parts": [{"text": content}]} 
         for role, content in raw_history
@@ -227,37 +146,42 @@ async def ask_gemini_stream(user_id: str, user_input: str):
         return
 
     user_input_to_use = user_input_cleaned
-
-    # TẠO PROMPT CỐ ĐỊNH PHÙ HỢP VỚI SDK MỚI
-    initial_prompt = [
-        {"role": "user", "parts": [{"text": f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}\n{PHOBE_SAFE_INSTRUCTION}"}]},
-        {"role": "model", "parts": [{"text": "Tôi đã hiểu. Tôi sẽ nhập vai theo đúng mô tả."}]}
-    ]
+    full_answer = ""
+    
+    # TẠO SYSTEM INSTRUCTION KẾT HỢP
+    # CÁCH LÀM MỚI: Truyền System Instruction qua tham số riêng của GenerationConfig
+    # Điều này hiệu quả hơn và đúng chuẩn SDK mới.
+    
+    base_instruction = f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}"
 
     # Xác định instruction dựa trên nội dung
     lower_input = user_input_to_use.lower()
     global flirt_enable_global # Cập nhật sử dụng biến global
+    
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
     elif flirt_enable_global:
         instruction = PHOBE_FLIRT_INSTRUCTION
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
-
-    final_input_content = f"{user_input_to_use}\n\n[PHONG CÁCH TRẢ LỜI HIỆN TẠI: {instruction}]"
-
-    new_user_message = {"role": "user", "parts": [{"text": final_input_content}]}
-
-    contents_to_send = initial_prompt + history + [new_user_message]
-    full_answer = ""
-
+    
+    final_system_instruction = f"{base_instruction}\n\n{instruction}"
+    
+    # Thêm câu hỏi hiện tại vào lịch sử để gửi đi (contents)
+    new_user_message = {"role": "user", "parts": [{"text": user_input_to_use}]}
+    contents_to_send = history + [new_user_message]
+    
     # KHỐI TRY/EXCEPT SỐ 1: Bắt lỗi Gemini API
     try:
+        # ✅ SỬA ĐỔI CHÍNH: Dùng system_instruction trong GenerationConfig
         response_stream = await asyncio.to_thread(
             lambda: gemini_model.generate_content(
                 contents=contents_to_send,
                 stream=True,
-                generation_config=genai.GenerationConfig(temperature=0.9) 
+                config=genai.GenerationConfig(
+                    temperature=0.9,
+                    system_instruction=final_system_instruction 
+                )
             )
         )
         for chunk in response_stream:
@@ -267,11 +191,12 @@ async def ask_gemini_stream(user_id: str, user_input: str):
                 yield text
     except Exception as e:
         print(f"🚨 LỖI GEMINI API CHO USER {user_id}: {type(e).__name__}: {e}")
-        yield f"\n⚠️ LỖI KỸ THUẬT: {type(e).__name__}"
+        yield f"\n⚠️ LỖỖI KỸ THUẬT: {type(e).__name__}"
         return
 
     # KHỐI TRY/EXCEPT SỐ 2: LƯU TIN NHẮN VÀO SQLITE
     try:
+        # Dùng user_input_cleaned để lưu (không có instruction phụ)
         state_manager.add_message(user_id, "user", user_input_cleaned)
         state_manager.add_message(user_id, "model", full_answer)
     except Exception as e:
@@ -447,12 +372,26 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
         print(f"🚨 LỖI CHỈNH SỬA CUỐI CÙNG: {type(e).__name__}")
         pass
 
-@bot.tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
-async def delete_conv(interaction: discord.Interaction):
-    user_id = str(interaction.user.id)
-    state_manager.clear_memory(user_id)
+@bot.tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt Mode (chỉ Admin có quyền)")
+@app_commands.describe(enable="Bật hoặc tắt Flirt Mode")
+@app_commands.default_permissions(administrator=True) # Chỉ Admin mới có quyền
+async def flirt_mode_command(interaction: discord.Interaction, enable: bool):
+    global flirt_enable_global
 
-    msg = "🧹 Phoebe đã dọn sạch trí nhớ, sẵn sàng nói chuyện lại nè~ 💖"
+    # 🚨 SỬA LỖI ATTRIBUTEERROR TẠI ĐÂY: Dùng interaction.member thay vì interaction.user
+    if not interaction.member.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Anh không phải Admin, em không thể làm theo lệnh này~", ephemeral=True)
+        return
+
+    flirt_enable_global = enable
+    if enable:
+        msg = "💞 Chế Độ **Flirt Mode (18+)** đã được kích hoạt! Phoebe giờ sẽ siêu táo bạo đấy~"
+        await bot.change_presence(activity=discord.Game("💞 Chế Độ Dâm Kích Hoạt"))
+    else:
+        msg = "🌸 Chế Độ **Bình Thường** đã được kích hoạt. Phoebe sẽ lại ngoan ngoãn nè~"
+        # Trả lại trạng thái ngẫu nhiên ngay lập tức
+        await random_status() 
+
     await interaction.response.send_message(msg, ephemeral=True)
 
 # ⚠️ SỬA LỖI CẮT CODE TẠI ĐÂY - THÊM PHẦN CÒN THIẾU CỦA HÀM NÀY
