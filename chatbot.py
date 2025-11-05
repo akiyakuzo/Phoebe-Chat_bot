@@ -318,13 +318,11 @@ def keep_alive():
     thread = Thread(target=run_flask, daemon=True)
     thread.start()
 
-# ========== SLASH COMMANDS (ĐÃ THÊM LOGIC TẠO ẢNH & DEBUG) ==========
+# ========== SLASH COMMANDS (ĐÃ SỬA LỖI NAME ERROR & DEFER) ==========
 @bot.tree.command(name="hoi", description="Hỏi Fibi bất cứ điều gì!")
 async def hoi_command(interaction: discord.Interaction, prompt: str):
-    # 🚨 THÊM DÒNG LOG NÀY VÀO NGAY DÒNG ĐẦU TIÊN CỦA HÀM XỬ LÝ LỆNH
+    # 🚨 DEBUG LOG
     print(f"DEBUG_START_HOI: Nhận lệnh /hoi từ {interaction.user.name} với prompt: {prompt[:30]}...") 
-
-    # Nếu sau khi sửa lỗi, dòng này không xuất hiện, tức là lỗi xảy ra ở Discord trước khi code Python kịp chạy .
     user_id = str(interaction.user.id)
 
     # Lấy trạng thái flirt_enable_global và BOT_NAME
@@ -366,81 +364,62 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
     ]
     thumbnail_url = random.choice(image_and_gif_choices)
 
-    embed = discord.Embed(
-        title=f"{BOT_NAME} trả lời 💕",
-        description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** Đang nói...", # SỬA 'cauhoi' thành 'prompt'
-        color=0xFFC0CB
-    )
-    embed.set_thumbnail(url=thumbnail_url)
-    
-    # Bỏ qua `interaction.response.defer` vì anh dùng `interaction.followup.send` ngay sau đó.
-    # Tuy nhiên, anh phải dùng `await interaction.response.defer(thinking=True)` trước 
-    # khi gọi `interaction.followup.send()`. Nếu không, sẽ gây lỗi Discord Timeout (3 giây).
-    
-    # ⚠️ THÊM LỆNH DEFER ĐỂ TRÁNH DISCORD TIMEOUT
+    # 1. GỬI LỆNH DEFER ĐỂ TRÁNH DISCORD TIMEOUT (RẤT QUAN TRỌNG)
     try:
         await interaction.response.defer(thinking=True)
     except Exception as e:
         print(f"🚨 LỖI DEFER: {e}")
         return
 
-    # Sửa: response_message phải được nhận từ followup.send SAU defer
+    embed = discord.Embed(
+        title=f"{BOT_NAME} trả lời 💕",
+        description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** Đang nói...",
+        color=0xFFC0CB
+    )
+    embed.set_thumbnail(url=thumbnail_url)
+
+    # 2. GỬI TIN NHẮN THEO DÕI
     try:
         response_message = await interaction.followup.send(embed=embed)
     except Exception as e:
         print(f"🚨 LỖI FOLLOWUP.SEND: {e}")
         return
 
-
     full_response = ""
     char_count_to_edit = 0
-    typing_cursors = ['**|**', ' ', '**|**', ' ', '...'] # Rút gọn cursor cho dễ nhìn
+    typing_cursors = ['**|**', ' ', '**|**', ' ', '...'] 
 
-    # Lấy và hiển thị câu trả lời (stream)
+    # 3. LẤY VÀ HIỂN THỊ CÂU TRẢ LỜI (STREAM)
     try:
-        # SỬA: Thay cauhoi bằng prompt
         async for chunk in ask_gemini_stream(user_id, prompt): 
             for char in chunk:
                 full_response += char
                 char_count_to_edit += 1
 
-                # Cập nhật cứ sau 5 ký tự
                 if char_count_to_edit % 5 == 0:
                     cursor_index = (char_count_to_edit // 5) % len(typing_cursors)
                     current_cursor = typing_cursors[cursor_index]
 
-                    # Tránh vượt giới hạn 4096 ký tự của Embed
                     display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
-
-                    # SỬA: Thay cauhoi bằng prompt
                     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** {display_text} {current_cursor}" 
                     try:
                         await response_message.edit(embed=embed)
-                    except (discord.errors.HTTPException, discord.errors.NotFound) as e:
-                        # Log lỗi chỉnh sửa nhỏ
+                    except (discord.errors.HTTPException, discord.errors.NotFound):
                         pass
                     await asyncio.sleep(TYPING_SPEED) 
 
-        # Kiểm tra nếu câu trả lời rỗng (lỗi API nghiêm trọng xảy ra)
         if not full_response:
             full_response = "❌ LỖI GEMINI API NGHIÊM TRỌNG: API key có thể bị khóa (403 Forbidden) hoặc có lỗi kết nối."
 
     except Exception as e:
-        # Bắt lỗi toàn bộ quá trình stream Gemini
         full_response = f"⚠️ LỖI CHAT API: {type(e).__name__} - Vui lòng kiểm tra Log Render để biết thêm chi tiết!"
         print(f"🚨🚨 LỖI GEMINI CHÍNH: {type(e).__name__} - {e}")
 
-    # === LOGIC TẠO VÀ GẮN ẢNH (SAU KHI GEMINI TRẢ LỜI) ===
+    # 4. LOGIC TẠO VÀ GẮN ẢNH
     generated_image_url = None
-    # ⚠️ LỖI NÀY CẦN SỬA: BIẾN `include_image` KHÔNG ĐƯỢC ĐỊNH NGHĨA.
-    # Tạm thời gỡ bỏ khối này. Nếu anh muốn tính năng tạo ảnh, anh cần thêm 
-    # một biến Boolean (ví dụ: `include_image = True` hoặc thêm vào slash command).
-
-    # 🚨 ĐỂ KHẮC PHỤC LỖI BIẾN KHÔNG XÁC ĐỊNH, CHỈ DÙNG LOGIC TẠO ẢNH NẾU PROMPT YÊU CẦU.
     if ("vẽ" in prompt.lower() or "ảnh" in prompt.lower() or "image" in prompt.lower() or "draw" in prompt.lower()) and replicate:
         print("DEBUG: Kích hoạt tạo ảnh.")
-        
-        # LỆNH DEFER LẦN 2 (NẾU CẦN THIẾT) HOẶC CHỈ CẬP NHẬT TRẠNG THÁI
+
         embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** {full_response}\n\n*Phoebe đang vẽ một bức tranh đẹp cho anh nè... 🎨 (Đang gọi Stable Diffusion API)*"
         try:
             await response_message.edit(embed=embed)
@@ -448,7 +427,6 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
             pass
             
         try:
-            # SỬA: Thay cauhoi bằng prompt
             image_context = f"Question: {prompt}. Answer: {full_response[:int(len(full_response)*0.8)]}" 
             generated_image_url = await generate_image_from_text(image_context, current_flirt_enable)
         except Exception as e:
@@ -456,13 +434,12 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
             full_response += "\n\n**[LỖI TẠO ẢNH: Vui lòng kiểm tra Log Render]**"
 
 
-    # Cập nhật cuối cùng (không có cursor và gắn ảnh)
-    # SỬA: Thay cauhoi bằng prompt
+    # 5. CẬP NHẬT CUỐI CÙNG
     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {prompt}\n**Fibi:** {full_response}" 
 
     if generated_image_url:
-        embed.set_image(url=generated_image_url) # Đặt hình ảnh lớn vào embed
-        embed.set_thumbnail(url=thumbnail_url) # Giữ thumbnail cũ
+        embed.set_image(url=generated_image_url)
+        embed.set_thumbnail(url=thumbnail_url) 
 
     try:
         await response_message.edit(embed=embed)
@@ -470,7 +447,7 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
         print(f"🚨 LỖI CHỈNH SỬA CUỐI CÙNG: {type(e).__name__}")
         pass
 
-@tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
+@bot.tree.command(name="deleteoldconversation", description="🧹 Xóa lịch sử hội thoại của bạn")
 async def delete_conv(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     state_manager.clear_memory(user_id)
@@ -478,32 +455,50 @@ async def delete_conv(interaction: discord.Interaction):
     msg = "🧹 Phoebe đã dọn sạch trí nhớ, sẵn sàng nói chuyện lại nè~ 💖"
     await interaction.response.send_message(msg, ephemeral=True)
 
-@tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt Mode (chỉ Admin có quyền)")
+# ⚠️ SỬA LỖI CẮT CODE TẠI ĐÂY - THÊM PHẦN CÒN THIẾU CỦA HÀM NÀY
+@bot.tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt Mode (chỉ Admin có quyền)")
 @app_commands.describe(enable="Bật hoặc tắt Flirt Mode")
-@app_commands.default_permissions(manage_guild=True)
-async def chat18plus(interaction: discord.Interaction, enable: bool):
-    global flirt_enable_global # Cập nhật sử dụng biến global
+@app_commands.default_permissions(administrator=True) # Chỉ Admin mới có quyền
+async def flirt_mode_command(interaction: discord.Interaction, enable: bool):
+    global flirt_enable_global
+    
+    # Kiểm tra quyền Admin (Discord tự động kiểm tra, nhưng thêm check code cho chắc)
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Anh không phải Admin, em không thể làm theo lệnh này~", ephemeral=True)
+        return
+
     flirt_enable_global = enable
-    msg = "💞 Flirt Mode đã được bật!" if enable else "🌸 Flirt Mode đã được tắt!"
+    if enable:
+        msg = "💞 Chế Độ **Flirt Mode (18+)** đã được kích hoạt! Phoebe giờ sẽ siêu táo bạo đấy~"
+        await bot.change_presence(activity=discord.Game("💞 Chế Độ Dâm Kích Hoạt"))
+    else:
+        msg = "🌸 Chế Độ **Bình Thường** đã được kích hoạt. Phoebe sẽ lại ngoan ngoãn nè~"
+        # Trả lại trạng thái ngẫu nhiên ngay lập tức
+        await random_status() 
+
     await interaction.response.send_message(msg, ephemeral=True)
 
-# ========== BOT EVENTS (ĐÃ THÊM CHANGE_PRESENCE BAN ĐẦU) ==========
+# ========== EVENT HANDLERS VÀ KHỞI CHẠY BOT (CẦN THIẾT) ==========
+
+# ĐỒNG BỘ LỆNH SAU KHI BOT KẾT NỐI
 @bot.event
 async def on_ready():
-    # Kiểm tra phiên bản SDK
-    print("⚡ Gemini SDK version:", genai.__version__)
-    print(f"✅ {BOT_NAME} đã sẵn sàng! Logged in as {bot.user}")
-
-    # 🚨 Thiết lập Status ban đầu
-    await bot.change_presence(status=discord.Status.online, activity=random.choice(activity_list))
-
-    random_status.start()
+    # Kiểm tra xem có Guild ID (Server ID) được config không
     if GUILD_ID:
-        await tree.sync(guild=discord.Object(GUILD_ID))
-        print(f"🔄 Slash commands đã sync cho guild {GUILD_ID}")
+        # Đồng bộ lệnh cho Server cụ thể (nhanh hơn)
+        guild = discord.Object(id=GUILD_ID)
+        await bot.tree.sync(guild=guild)
+        print(f"✅ Đã đồng bộ lệnh Slash cho Guild ID: {GUILD_ID}")
     else:
-        await tree.sync()
-        print("🔄 Slash commands đã sync toàn cầu")
+        # Đồng bộ toàn cục (chậm hơn, có thể mất đến 1 giờ)
+        await bot.tree.sync()
+        print("✅ Đã đồng bộ lệnh Slash toàn cục.")
+
+    print(f"💫 Bắt đầu Phoebe Xinh Đẹp: {bot.user.name} (ID: {bot.user.id})")
+
+    # Khởi chạy status loop
+    if not random_status.is_running():
+        random_status.start()
 
 # ========== RUN BOT ==========
 if __name__ == "__main__":
