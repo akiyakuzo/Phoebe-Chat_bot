@@ -307,18 +307,19 @@ def keep_alive():
     thread = Thread(target=run_flask, daemon=True)
     thread.start()
 
-# ========== SLASH COMMANDS (ĐÃ THÊM LOGIC TẠO ẢNH) ==========
+# ========== SLASH COMMANDS (ĐÃ THÊM LOGIC TẠO ẢNH & DEBUG) ==========
 @tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
 @app_commands.describe(cauhoi="Nhập câu hỏi của bạn", include_image="Bao gồm hình ảnh dựa trên ngữ cảnh (Tốn tín dụng Replicate)?") 
 async def hoi(interaction: discord.Interaction, cauhoi: str, include_image: bool = False):
     await interaction.response.defer(thinking=True)
     user_id = str(interaction.user.id)
 
-    # Lấy trạng thái flirt_enable_global
-    global flirt_enable_global, BOT_NAME
+    # Lấy trạng thái flirt_enable_global và BOT_NAME
+    global flirt_enable_global, BOT_NAME, TYPING_SPEED 
     current_flirt_enable = flirt_enable_global
 
     image_and_gif_choices = [
+        # ... (Danh sách URL ảnh/GIF giữ nguyên) ...
         "https://files.catbox.moe/2474tj.png", "https://files.catbox.moe/66v9vw.jpg", 
         "https://files.catbox.moe/ezqs00.jpg", "https://files.catbox.moe/yow35q.png",
         "https://files.catbox.moe/pzbhdp.jpg", "https://files.catbox.moe/lyklnj.jpg",
@@ -351,7 +352,7 @@ async def hoi(interaction: discord.Interaction, cauhoi: str, include_image: bool
         "https://files.catbox.moe/ft3dj9.gif"
     ]
     thumbnail_url = random.choice(image_and_gif_choices)
-    
+
     embed = discord.Embed(
         title=f"{BOT_NAME} trả lời 💕",
         description=f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** Đang nói...",
@@ -366,46 +367,65 @@ async def hoi(interaction: discord.Interaction, cauhoi: str, include_image: bool
     typing_cursors = ['**|**', ' ', '**|**', ' ', '**|**', ' ', '**|**', ' ', '...']
 
     # Lấy và hiển thị câu trả lời (stream)
-    async for chunk in ask_gemini_stream(user_id, cauhoi):
-        for char in chunk:
-            full_response += char
-            char_count_to_edit += 1
+    try:
+        async for chunk in ask_gemini_stream(user_id, cauhoi):
+            for char in chunk:
+                full_response += char
+                char_count_to_edit += 1
 
-            # Cập nhật cứ sau 5 ký tự
-            if char_count_to_edit % 5 == 0:
-                cursor_index = (char_count_to_edit // 5) % len(typing_cursors)
-                current_cursor = typing_cursors[cursor_index]
+                # Cập nhật cứ sau 5 ký tự
+                if char_count_to_edit % 5 == 0:
+                    cursor_index = (char_count_to_edit // 5) % len(typing_cursors)
+                    current_cursor = typing_cursors[cursor_index]
 
-                # Tránh vượt giới hạn 4096 ký tự của Embed
-                display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
+                    # Tránh vượt giới hạn 4096 ký tự của Embed
+                    display_text = full_response[:3900] + ("..." if len(full_response) > 3900 else "")
 
-                embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {display_text} {current_cursor}"
-                try:
-                    await response_message.edit(embed=embed)
-                except (discord.errors.HTTPException, discord.errors.NotFound) as e:
-                    print(f"🚨 LỖI CHỈNH SỬA TIN NHẮN (Typing Effect): {type(e).__name__}")
-                    pass
-                await asyncio.sleep(TYPING_SPEED) 
+                    embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {display_text} {current_cursor}"
+                    try:
+                        await response_message.edit(embed=embed)
+                    except (discord.errors.HTTPException, discord.errors.NotFound) as e:
+                        # Log lỗi chỉnh sửa nhỏ
+                        pass
+                    await asyncio.sleep(TYPING_SPEED) 
 
+        # Kiểm tra nếu câu trả lời rỗng (lỗi API nghiêm trọng xảy ra)
+        if not full_response:
+            full_response = "❌ LỖI GEMINI API NGHIÊM TRỌNG: API key có thể bị khóa (403 Forbidden) hoặc có lỗi kết nối."
+    
+    except Exception as e:
+        # Bắt lỗi toàn bộ quá trình stream Gemini
+        full_response = f"⚠️ LỖI CHAT API: {type(e).__name__} - Vui lòng kiểm tra Log Render để biết thêm chi tiết!"
+        print(f"🚨🚨 LỖI GEMINI CHÍNH: {type(e).__name__} - {e}")
+        
     # === LOGIC TẠO VÀ GẮN ẢNH (SAU KHI GEMINI TRẢ LỜI) ===
     generated_image_url = None
-    if include_image and replicate:
-        # Sử dụng 80% câu trả lời của bot + câu hỏi của người dùng làm context cho prompt ảnh
-        image_context = f"Question: {cauhoi}. Answer: {full_response[:int(len(full_response)*0.8)]}"
-        
-        # Hiển thị thông báo đang tạo ảnh
-        embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {full_response}\n\n*Phoebe đang vẽ một bức tranh đẹp cho anh nè... 🎨 (Đang gọi Stable Diffusion API)*"
-        try:
-            await response_message.edit(embed=embed)
-        except:
-             pass
-        
-        # Gọi hàm tạo ảnh, truyền trạng thái flirt mode
-        generated_image_url = await generate_image_from_text(image_context, current_flirt_enable)
-        
+    if include_image:
+        if not replicate:
+            print("⚠️ LỖI REPLICATE: Thư viện 'replicate' chưa được import thành công. Bỏ qua tạo ảnh.")
+        else:
+            # Sử dụng 80% câu trả lời của bot + câu hỏi của người dùng làm context cho prompt ảnh
+            image_context = f"Question: {cauhoi}. Answer: {full_response[:int(len(full_response)*0.8)]}"
+
+            # Hiển thị thông báo đang tạo ảnh
+            embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {full_response}\n\n*Phoebe đang vẽ một bức tranh đẹp cho anh nè... 🎨 (Đang gọi Stable Diffusion API)*"
+            try:
+                await response_message.edit(embed=embed)
+            except:
+                 pass
+
+            # Gọi hàm tạo ảnh, truyền trạng thái flirt mode
+            try:
+                generated_image_url = await generate_image_from_text(image_context, current_flirt_enable)
+            except Exception as e:
+                # Bắt lỗi toàn bộ quá trình gọi Replicate API
+                print(f"🚨🚨 LỖI REPLICATE CHÍNH: {type(e).__name__} - {e}")
+                full_response += "\n\n**[LỖI TẠO ẢNH: Vui lòng kiểm tra Log Render]**"
+
+
     # Cập nhật cuối cùng (không có cursor và gắn ảnh)
     embed.description = f"**Người hỏi:** {interaction.user.mention}\n**Câu hỏi:** {cauhoi}\n**Fibi:** {full_response}"
-    
+
     if generated_image_url:
         embed.set_image(url=generated_image_url) # Đặt hình ảnh lớn vào embed
         embed.set_thumbnail(url=thumbnail_url) # Giữ thumbnail cũ
