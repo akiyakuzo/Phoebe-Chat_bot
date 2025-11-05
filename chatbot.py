@@ -500,7 +500,16 @@ async def on_ready():
     if not random_status.is_running():
         random_status.start()
 
-# ========== RUN BOT ==========
+# RUN BOT VÀ FLASK
 if __name__ == "__main__":
+    if not TOKEN:
+        raise RuntimeError("⚠️ Thiếu TOKEN! Vui lòng kiểm tra biến môi trường DISCORD_TOKEN.")
+    
+    # Bắt đầu Flask server
     keep_alive()
-    bot.run(TOKEN)
+
+    # Bắt đầu Discord bot
+    try:
+        bot.run(TOKEN)
+    except Exception as e:
+        print(f"🚨 LỖI KHỞI CHẠY DISCORD BOT: {e}")
