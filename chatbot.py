@@ -319,10 +319,12 @@ def keep_alive():
     thread.start()
 
 # ========== SLASH COMMANDS (ĐÃ THÊM LOGIC TẠO ẢNH & DEBUG) ==========
-@tree.command(name="hoi", description="💬 Hỏi Phoebe Xinh Đẹp!")
-@app_commands.describe(cauhoi="Nhập câu hỏi của bạn", include_image="Bao gồm hình ảnh dựa trên ngữ cảnh (Tốn tín dụng Replicate)?") 
-async def hoi(interaction: discord.Interaction, cauhoi: str, include_image: bool = False):
-    await interaction.response.defer(thinking=True)
+@chatbot.tree.command(name="hoi", description="Hỏi Fibi bất cứ điều gì!")
+async def hoi_command(interaction: discord.Interaction, prompt: str):
+    # 🚨 THÊM DÒNG LOG NÀY VÀO NGAY DÒNG ĐẦU TIÊN CỦA HÀM XỬ LÝ LỆNH
+    print(f"DEBUG_START_HOI: Nhận lệnh /hoi từ {interaction.user.name} với prompt: {prompt[:30]}...") 
+
+    # Nếu sau khi sửa lỗi, dòng này không xuất hiện, tức là lỗi xảy ra ở Discord trước khi code Python kịp chạy .
     user_id = str(interaction.user.id)
 
     # Lấy trạng thái flirt_enable_global và BOT_NAME
