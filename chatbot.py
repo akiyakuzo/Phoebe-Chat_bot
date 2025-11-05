@@ -1,4 +1,4 @@
-# ==== PATCH PYTHON 3.11 ====
+# ==== PATCH PYTHON 3.11 (GIỮ NGUYÊN) ====
 import sys, types
 sys.modules['audioop'] = types.ModuleType('audioop')
 
@@ -18,7 +18,6 @@ import google.generativeai as genai
 try:
     import replicate
 except ImportError:
-    # Nếu thiếu thư viện, in cảnh báo nhưng không lỗi
     print("⚠️ Thiếu thư viện 'replicate'. Tính năng tạo ảnh sẽ bị tắt.")
     replicate = None
 
@@ -27,10 +26,9 @@ try:
     from state_manager import StateManager
     state_manager = StateManager()
 except ImportError:
-    # Báo lỗi rõ ràng nếu thiếu file state_manager
     raise ImportError("⚠️ LỖI: Không tìm thấy file state_manager.py. Vui lòng kiểm tra lại cấu trúc repo.")
 
-# ========== CONFIG GOOGLE GENERATIVE AI (Đã sửa lỗi SDK) ==========
+# ========== CONFIG GOOGLE GENERATIVE AI ==========
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("⚠️ Thiếu GEMINI_API_KEY!")
@@ -41,23 +39,19 @@ try:
     # ✅ KHỞI TẠO CHUẨN SDK 0.8.0+
     genai.configure(api_key=GEMINI_API_KEY)
     gemini_model = genai.GenerativeModel(MODEL_NAME) 
-    
-    # 🚨 BƯỚC MỚI: KIỂM TRA API KEY NGAY LẬP TỨC
+
     try:
-        # Thử gọi một API đơn giản để xác nhận key hợp lệ
         models = list(genai.list_models())
         print(f"✅ KIỂM TRA GEMINI API THÀNH CÔNG: Đã thấy {len(models)} mô hình.")
     except Exception as e:
-        # Nếu API Key sai/bị khóa, lỗi sẽ xuất hiện TẠY ĐÂY!
         print(f"🚨🚨 LỖI NGHIÊM TRỌNG: GEMINI API KEY CÓ VẤN ĐỀ. Lỗi: {e}")
         raise RuntimeError(f"Lỗi xác thực/kết nối Gemini API: {e}")
 
 except Exception as e:
     raise RuntimeError(f"Lỗi khởi tạo Gemini: {e}")
 
-# === 2. CONFIG REPLICATE (ĐÃ CẬP NHẬT MODEL ID) ===
+# === 2. CONFIG REPLICATE ===
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
-# ID Mô hình Anime mới (littlemonsterzhang/wai90_sdxl)
 ANIME_MODEL_ID = "littlemonsterzhang/wai90_sdxl:820ce2c86370ccfac38e9126bcffc58d23348a0ab06179c4b2f49c444ef2d0a6"
 
 
@@ -65,11 +59,10 @@ ANIME_MODEL_ID = "littlemonsterzhang/wai90_sdxl:820ce2c86370ccfac38e9126bcffc58d
 BOT_NAME = "Fibi Béll 💖"
 TOKEN = os.getenv("TOKEN")
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
-# Đặt flirt_enable là global để truy cập dễ hơn trong các hàm
 flirt_enable_global = False 
 TYPING_SPEED = 0.01
 
-# ========== STYLE INSTRUCTIONS (Giữ nguyên) ==========
+# ========== STYLE INSTRUCTIONS ==========
 PHOBE_SAFE_INSTRUCTION = (
     "✨ Trả lời thân mật, tự nhiên, dễ thương, ngây thơ. "
     "Có thể dùng các biểu cảm mặt cười như (* / ω \\ *), (✿◠‿◠). "
@@ -99,7 +92,7 @@ PHOBE_COMFORT_INSTRUCTION = (
     "Tối đa 80 từ và ngừng nói khi vượt quá 80 từ."
 )
 
-# ========== PROMPTS (Giữ nguyên) ==========
+# ========== PROMPTS ==========
 PHOBE_BASE_PROMPT = """
 Bạn là Phoebe, một nhân vật ★5 hệ Spectro trong Wuthering Waves.
 
@@ -124,13 +117,51 @@ Cô dịu dàng, trong sáng, đôi khi tinh nghịch và mang trong lòng khát
 - **Kiyaaaa:** người bạn thân thiết nhất của Phoebe, luôn quan tâm và dành cho cô sự tôn trọng cùng sự ấm áp hiếm có.
 """.strip()
 
+# ========== REPLICATE IMAGE GENERATION (ĐÃ THÊM) ==========
+async def generate_image_from_text(prompt: str, flirt_mode: bool = False):
+    if not replicate or not REPLICATE_API_TOKEN:
+        return None 
+
+    # Xây dựng prompt cho Stable Diffusion
+    base_prompt = "anime style, wuthering waves character, intricate detail, extremely high quality, best composition, professional illustration"
+    
+    if flirt_mode:
+        style_prompt = "suggestive, very attractive, blush, skin details, hyper detailed, soft lighting, focus on body curve"
+    else:
+        style_prompt = "wholesome, soft shading, gentle colors, full body, beautiful face"
+
+    final_prompt = f"{style_prompt}, {prompt}, {base_prompt}"
+    
+    # Negative prompt
+    negative_prompt = "ugly, deformed, bad anatomy, deformed face, disfigured, poor detailing, blurry, low res, low quality, NSFW, naked"
+
+    # Gọi Replicate API
+    print(f"DEBUG_REPLICATE: Gửi prompt: {final_prompt[:80]}...")
+    
+    output = await asyncio.to_thread(
+        lambda: replicate.run(
+            ANIME_MODEL_ID,
+            input={
+                "prompt": final_prompt,
+                "negative_prompt": negative_prompt,
+                "width": 768,
+                "height": 1024,
+                "num_outputs": 1,
+                "lora_scale": 0.8
+            }
+        )
+    )
+    
+    if output and isinstance(output, list) and output[0]:
+        return output[0]
+    return None
+
+
 # ========== ASK GEMINI STREAM (Đã cập nhật cho SDK 0.8.0+) ==========
 async def ask_gemini_stream(user_id: str, user_input: str):
-    # Lấy lịch sử trực tiếp từ SQLite
     raw_history = state_manager.get_memory(user_id)
-    
-    # Format history: [{'role': 'user/model', 'parts': [{'text': 'content'}]}, ...]
-    # Lịch sử chỉ cần chứa các tin nhắn của user và model, không cần system prompt
+
+    # Format history cho SDK 0.8.0+
     history = [
         {"role": role, "parts": [{"text": content}]} 
         for role, content in raw_history
@@ -140,6 +171,7 @@ async def ask_gemini_stream(user_id: str, user_input: str):
     if not user_input:
         yield "⚠️ Không nhận được câu hỏi, anh thử lại nhé!"
         return
+    
     user_input_cleaned = user_input.encode("utf-8", errors="ignore").decode()
     if not user_input_cleaned:
         yield "⚠️ Nội dung có ký tự lạ, em không đọc được. Anh viết lại đơn giản hơn nhé!"
@@ -147,33 +179,27 @@ async def ask_gemini_stream(user_id: str, user_input: str):
 
     user_input_to_use = user_input_cleaned
     full_answer = ""
-    
-    # TẠO SYSTEM INSTRUCTION KẾT HỢP
-    # CÁCH LÀM MỚI: Truyền System Instruction qua tham số riêng của GenerationConfig
-    # Điều này hiệu quả hơn và đúng chuẩn SDK mới.
-    
-    base_instruction = f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}"
 
-    # Xác định instruction dựa trên nội dung
+    # TẠO SYSTEM INSTRUCTION KẾT HỢP
+    base_instruction = f"{PHOBE_BASE_PROMPT}\n{PHOBE_LORE_PROMPT}"
     lower_input = user_input_to_use.lower()
-    global flirt_enable_global # Cập nhật sử dụng biến global
-    
+    global flirt_enable_global 
+
     if any(w in lower_input for w in ["buồn", "mệt", "chán", "stress", "tệ quá"]):
         instruction = PHOBE_COMFORT_INSTRUCTION
     elif flirt_enable_global:
         instruction = PHOBE_FLIRT_INSTRUCTION
     else:
         instruction = PHOBE_SAFE_INSTRUCTION
-    
+
     final_system_instruction = f"{base_instruction}\n\n{instruction}"
-    
-    # Thêm câu hỏi hiện tại vào lịch sử để gửi đi (contents)
+
+    # Thêm câu hỏi hiện tại vào lịch sử để gửi đi
     new_user_message = {"role": "user", "parts": [{"text": user_input_to_use}]}
     contents_to_send = history + [new_user_message]
-    
+
     # KHỐI TRY/EXCEPT SỐ 1: Bắt lỗi Gemini API
     try:
-        # ✅ SỬA ĐỔI CHÍNH: Dùng system_instruction trong GenerationConfig
         response_stream = await asyncio.to_thread(
             lambda: gemini_model.generate_content(
                 contents=contents_to_send,
@@ -196,19 +222,18 @@ async def ask_gemini_stream(user_id: str, user_input: str):
 
     # KHỐI TRY/EXCEPT SỐ 2: LƯU TIN NHẮN VÀO SQLITE
     try:
-        # Dùng user_input_cleaned để lưu (không có instruction phụ)
         state_manager.add_message(user_id, "user", user_input_cleaned)
         state_manager.add_message(user_id, "model", full_answer)
     except Exception as e:
         print(f"🚨 LỖI SQLITE CHO USER {user_id}: {type(e).__name__}: {e}")
 
-# ========== DISCORD CONFIG (Giữ nguyên) ==========
+# ========== DISCORD CONFIG ==========
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# ========== BOT STATUS (Giữ nguyên) ==========
+# ========== BOT STATUS ==========
 status_list = [discord.Status.online, discord.Status.idle, discord.Status.dnd]
 activity_list = [
     discord.Game("💖 Trò chuyện cùng anh"),
@@ -218,14 +243,14 @@ activity_list = [
 
 @tasks.loop(minutes=10)
 async def random_status():
-    global flirt_enable_global # Dùng biến global
+    global flirt_enable_global
     if flirt_enable_global:
         activity = discord.Game("💞 Chế Độ Dâm Kích Hoạt")
     else:
         activity = random.choice(activity_list)
     await bot.change_presence(status=random.choice(status_list), activity=activity)
 
-# ========== FLASK SERVER (Giữ nguyên) ==========
+# ========== FLASK SERVER ==========
 app = Flask(__name__)
 
 @app.route("/")
@@ -243,19 +268,17 @@ def keep_alive():
     thread = Thread(target=run_flask, daemon=True)
     thread.start()
 
-# ========== SLASH COMMANDS (ĐÃ SỬA LỖI NAME ERROR & DEFER) ==========
+# ========== SLASH COMMANDS (ĐÃ SỬA LỖI DEFER VÀ TRÙNG LẶP) ==========
+
 @bot.tree.command(name="hoi", description="Hỏi Fibi bất cứ điều gì!")
 async def hoi_command(interaction: discord.Interaction, prompt: str):
-    # 🚨 DEBUG LOG
     print(f"DEBUG_START_HOI: Nhận lệnh /hoi từ {interaction.user.name} với prompt: {prompt[:30]}...") 
     user_id = str(interaction.user.id)
 
-    # Lấy trạng thái flirt_enable_global và BOT_NAME
     global flirt_enable_global, BOT_NAME, TYPING_SPEED 
     current_flirt_enable = flirt_enable_global
 
     image_and_gif_choices = [
-        # ... (Danh sách URL ảnh/GIF giữ nguyên) ...
         "https://files.catbox.moe/2474tj.png", "https://files.catbox.moe/66v9vw.jpg", 
         "https://files.catbox.moe/ezqs00.jpg", "https://files.catbox.moe/yow35q.png",
         "https://files.catbox.moe/pzbhdp.jpg", "https://files.catbox.moe/lyklnj.jpg",
@@ -321,6 +344,7 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
                 full_response += char
                 char_count_to_edit += 1
 
+                # Cập nhật tin nhắn 5 ký tự một lần
                 if char_count_to_edit % 5 == 0:
                     cursor_index = (char_count_to_edit // 5) % len(typing_cursors)
                     current_cursor = typing_cursors[cursor_index]
@@ -350,7 +374,7 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
             await response_message.edit(embed=embed)
         except:
             pass
-            
+
         try:
             image_context = f"Question: {prompt}. Answer: {full_response[:int(len(full_response)*0.8)]}" 
             generated_image_url = await generate_image_from_text(image_context, current_flirt_enable)
@@ -372,15 +396,15 @@ async def hoi_command(interaction: discord.Interaction, prompt: str):
         print(f"🚨 LỖI CHỈNH SỬA CUỐI CÙNG: {type(e).__name__}")
         pass
 
-# ⚠️ SỬA LỖI CẮT CODE TẠI ĐÂY - THÊM PHẦN CÒN THIẾU CỦA HÀM NÀY
+# 🚨 CHỈ GIỮ LẠI MỘT LẦN ĐỊNH NGHĨA LỆNH CHAT18PLUS NÀY
 @bot.tree.command(name="chat18plus", description="🔞 Bật/tắt Flirt Mode (chỉ Admin có quyền)")
 @app_commands.describe(enable="Bật hoặc tắt Flirt Mode")
-@app_commands.default_permissions(administrator=True) # Chỉ Admin mới có quyền
+@app_commands.default_permissions(administrator=True) 
 async def flirt_mode_command(interaction: discord.Interaction, enable: bool):
     global flirt_enable_global
-    
-    # Kiểm tra quyền Admin (Discord tự động kiểm tra, nhưng thêm check code cho chắc)
-    if not interaction.user.guild_permissions.administrator:
+
+    # Đã sửa: Dùng interaction.member để kiểm tra quyền
+    if not interaction.member.guild_permissions.administrator:
         await interaction.response.send_message("❌ Anh không phải Admin, em không thể làm theo lệnh này~", ephemeral=True)
         return
 
@@ -390,30 +414,24 @@ async def flirt_mode_command(interaction: discord.Interaction, enable: bool):
         await bot.change_presence(activity=discord.Game("💞 Chế Độ Dâm Kích Hoạt"))
     else:
         msg = "🌸 Chế Độ **Bình Thường** đã được kích hoạt. Phoebe sẽ lại ngoan ngoãn nè~"
-        # Trả lại trạng thái ngẫu nhiên ngay lập tức
         await random_status() 
 
     await interaction.response.send_message(msg, ephemeral=True)
 
 # ========== EVENT HANDLERS VÀ KHỞI CHẠY BOT (CẦN THIẾT) ==========
 
-# ĐỒNG BỘ LỆNH SAU KHI BOT KẾT NỐI
 @bot.event
 async def on_ready():
-    # Kiểm tra xem có Guild ID (Server ID) được config không
     if GUILD_ID:
-        # Đồng bộ lệnh cho Server cụ thể (nhanh hơn)
         guild = discord.Object(id=GUILD_ID)
         await bot.tree.sync(guild=guild)
         print(f"✅ Đã đồng bộ lệnh Slash cho Guild ID: {GUILD_ID}")
     else:
-        # Đồng bộ toàn cục (chậm hơn, có thể mất đến 1 giờ)
         await bot.tree.sync()
         print("✅ Đã đồng bộ lệnh Slash toàn cục.")
 
     print(f"💫 Bắt đầu Phoebe Xinh Đẹp: {bot.user.name} (ID: {bot.user.id})")
 
-    # Khởi chạy status loop
     if not random_status.is_running():
         random_status.start()
 
@@ -421,7 +439,7 @@ async def on_ready():
 if __name__ == "__main__":
     if not TOKEN:
         raise RuntimeError("⚠️ Thiếu TOKEN! Vui lòng kiểm tra biến môi trường DISCORD_TOKEN.")
-    
+
     # Bắt đầu Flask server
     keep_alive()
 
